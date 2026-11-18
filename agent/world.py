@@ -18,6 +18,9 @@ METRIC = "metric"
 # The RTVI client-message type Unity sends a game snapshot under, as {"t": "game-event", "d": {...}}. Only a scenario with a game takes them.
 GAME_EVENT = "game-event"
 
+# The RTVI client-message types Unity sends a participant input under, each with that input's full current state, as {"t": "held", "d": {"left": ..., "right": ...}}. They are logged as sent; nothing acts on them yet.
+CLIENT_INPUTS = {"held"}
+
 # The RTVI server-message type the agent sends the session's settings under, as {"t": "session", "d": {...}}.
 SESSION = "session"
 
@@ -65,9 +68,11 @@ def attach(worker: PipelineWorker, greeting: str | None, study: StudyLog, settin
 
     @worker.rtvi.event_handler("on_client_message")
     async def message(rtvi, message: ClientMessage):
-        """Log a client metric to the study log as sent and hand a game snapshot to the game; any other message type is not part of the contract."""
+        """Log a client metric or input to the study log as sent and hand a game snapshot to the game; any other message type is not part of the contract."""
         if message.type == METRIC:
             study.write("client_metric", data=message.data)
+        elif message.type in CLIENT_INPUTS:
+            study.write("client_input", input=message.type, data=message.data)
         elif message.type == GAME_EVENT and game is not None:
             await game.receive(message.data)
         else:

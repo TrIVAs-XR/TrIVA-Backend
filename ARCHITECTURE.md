@@ -71,6 +71,8 @@ Unity to agent:
 
 - `metric`: a measurement, written to the study log as sent, so Unity adds one without a backend change. By convention `d` carries a `name`.
 - `game-event`: a full snapshot of the game's state, taken only by a scenario with a game. What `d` holds and how each event is reacted to is in that scenario's `README.md`.
+- Participant inputs (`world.CLIENT_INPUTS`), each carrying that input's full current state, so only the newest of a type counts. Written to the study log as sent; nothing acts on them yet. `held`: `{"left": <object>, "right": <object>}`, sent whenever a grab starts or ends or a held object changes, `null` for an empty hand.
+- An object is described as `{"id": ..., "kind": ..., ...}`: the ID Unity's `ReferableObject` gives it, unique among the loaded objects, its kind, and whatever its scenario adds (a Lab flask adds `shape` and `substance`). An object Unity cannot refer to is `{"id": null, "kind": "unknown"}`. The ID is how either side names an object to the other.
 - Any other client-message type is logged as unhandled.
 
 Camera: Unity publishes its camera as an ordinary video track, low resolution and low frame rate, and leaves it open. `--vision` decides whether the agent subscribes. Frames are held and never reach the LLM.
@@ -83,7 +85,7 @@ Participant IDs: any string that can name a file. `P` and a number is the number
 
 Two logs per session:
 
-- `logs/study/<session>.jsonl`, the record the analysis reads. One JSON line per event, flushed as written, each stamped with `ts`, `iso` and the current `turn`. `session_start` names participant, session, language, scenario, transport, vision, the models by catalog name and by the provider's model ID (`stt_model`, `llm_model`, `tts_model`), and the code version; then `client_ready`, `user_transcript` and `assistant_message` as they entered the LLM context, `llm_thought` with each thought of a reasoning model whole, `tool_call`, `turn_started` and `turn_ended` with duration, interruption and usage, `response_latency` with its `latency_breakdown` stage by stage, `first_speech_latency` once, `interruption_latency`, `client_metric` from Unity, and `game_event` with the snapshot as `data` and its `reaction` (`opening`, `intro`, `silent`, `when_idle` or `interrupt`). `session_end` closes it with totals.
+- `logs/study/<session>.jsonl`, the record the analysis reads. One JSON line per event, flushed as written, each stamped with `ts`, `iso` and the current `turn`. `session_start` names participant, session, language, scenario, transport, vision, the models by catalog name and by the provider's model ID (`stt_model`, `llm_model`, `tts_model`), and the code version; then `client_ready`, `user_transcript` and `assistant_message` as they entered the LLM context, `llm_thought` with each thought of a reasoning model whole, `tool_call`, `turn_started` and `turn_ended` with duration, interruption and usage, `response_latency` with its `latency_breakdown` stage by stage, `first_speech_latency` once, `interruption_latency`, `client_metric` and `client_input` (with `input`, its type, and `data`) from Unity, and `game_event` with the snapshot as `data` and its `reaction` (`opening`, `intro`, `silent`, `when_idle` or `interrupt`). `session_end` closes it with totals.
 - `logs/debug/<session>_<start time>.jsonl`, for debugging: every log record of the run, every frame once, and every LLM call with the full context it was given, its tool calls and its output.
 
 ## Benchmarks
