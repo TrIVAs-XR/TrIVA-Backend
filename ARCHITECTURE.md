@@ -40,7 +40,7 @@ Each choice is made in one place and reaches the command line and the dialog fro
 - Models: `agent/services/catalog.py`, name to factory, with `DEFAULTS` and the languages each voice speaks. A factory imports its provider inside the function, so selecting one model never loads another's dependencies. Every entry names a pinned snapshot such as `mistral-small-2603`, never a `-latest` alias, so a provider cannot change the model under a running study; a retired snapshot fails at startup instead. Every Mistral LLM entry fixes its `reasoning_effort`: `none` where the model can turn reasoning off (`mistral-small`), otherwise the lowest it accepts (`low` for `mistral-large`). Mistral streams thinking as content parts; `agent/services/mistral_llm.py` turns them into Pipecat's `LLMThought*` frames, so thinking never reaches TTS or the LLM context, and passes only the answer on as text. A request that ends on a tool result goes out as it is: Pipecat's Mistral adapter would append a blank assistant reply marked as a prefix to continue, which Mistral does not need and Large 4 refuses.
 - Scenario: `agent/scenarios/`, name to `Scenario`: the system prompt, an optional fixed greeting, and the reaction table for a scenario with a game. A game with a greeting opens with an intro. What a session is about varies here and nowhere else. Each scenario has its own folder, and its `README.md` describes it: persona, opening, and the game events it takes.
 - Transport: `session.TRANSPORTS`. LiveKit is the only one.
-- Session: participant ID, language (`config.LANGUAGES`, English or German) and `--vision`, on the command line or in the dialog.
+- Session: participant ID, language (`config.LANGUAGES`, English or German) and `--vision`, on the command line or in the dialog; `--save-frames` (command line only, needs `--vision`) for testing the camera track.
 
 A field with a single option is settled without asking. A command line naming the participant, the language and every field with a choice starts headless.
 
@@ -75,7 +75,7 @@ Unity to agent:
 - An object is described as `{"id": ..., "kind": ..., ...}`: an ID unique among the loaded objects, its kind, and whatever its scenario adds (a Lab flask adds `shape` and `substance`). An object Unity cannot refer to is `{"id": null, "kind": "unknown", "name": ...}`: named, but without an ID. The ID is how either side names an object to the other.
 - Any other client-message type is logged as unhandled.
 
-Camera: Unity publishes its camera as an ordinary video track, low resolution and low frame rate, and leaves it open. `--vision` decides whether the agent subscribes. Frames are held and never reach the LLM.
+Camera: Unity publishes the participant's view as an ordinary video track named `vision`, low resolution and low frame rate, and leaves it open. `--vision` decides whether the agent subscribes. Frames never reach the LLM. With `--save-frames`, each frame is written as a PNG to `logs/frames/<session>/`, named by its arrival time.
 
 ## Logs
 

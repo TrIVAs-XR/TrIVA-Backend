@@ -9,7 +9,7 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.transcriptions.language import Language
 from pipecat.workers.runner import WorkerRunner
 
-from agent import config, join, livekit_server, nemotron_server, pipeline, roster, scenarios, session, world
+from agent import config, frame_saver, join, livekit_server, nemotron_server, pipeline, roster, scenarios, session, world
 from agent.config import AUDIO_IN, AUDIO_OUT
 from agent.game import START_TASK, Game
 from agent.observability import debug_log
@@ -91,6 +91,11 @@ async def main():
         scenario = scenarios.SCENARIOS[run.scenario]
         # A scenario with a game that opens on a greeting holds the game until the agent starts the task.
         intro = scenario.reaction is not None and scenario.greeting is not None
+        saver = None
+        if run.save_frames:
+            frames_path = frame_saver.DIRECTORY / study_path.stem
+            saver = frame_saver.FrameSaver(frames_path)
+            logger.info(f"Saving camera frames to {frames_path}")
         worker = PipelineWorker(
             pipeline.build(
                 transport,
@@ -99,6 +104,7 @@ async def main():
                 tts,
                 scenario.system_prompt(run.language),
                 [START_TASK] if intro else [],
+                saver,
             ),
             params=PipelineParams(
                 audio_in_sample_rate=AUDIO_IN,

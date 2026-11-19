@@ -69,6 +69,8 @@ uv run python -m tools.local_client
 
 Each session writes a study log and a debug log under `logs/`. What each holds is in [`ARCHITECTURE.md`](ARCHITECTURE.md#logs).
 
+To check what the client's camera track shows, start the agent with `--vision --save-frames`: every frame is written as a PNG to `logs/frames/<session>/`.
+
 ### Tests
 
 The unit tests need nothing running:

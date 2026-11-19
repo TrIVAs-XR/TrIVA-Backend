@@ -18,6 +18,7 @@ from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import StrategyMode, UserTurnStrategies, UserTurnStrategiesParams
 from pipecat.utils.types import NOT_GIVEN
 
+from agent.frame_saver import FrameSaver
 from agent.vad_fallback import VADFallback, VADFallbackStopStrategy
 
 
@@ -28,8 +29,9 @@ def build(
     tts: TTSService,
     system_prompt: str,
     tools: list[FunctionSchema],
+    frame_saver: FrameSaver | None = None,
 ) -> Pipeline:
-    """Assemble the pipeline. The only place it is assembled."""
+    """Assemble the pipeline. The only place it is assembled. A frame saver, when given, sees the transport's input first."""
     context = LLMContext(messages=[{"role": "system", "content": system_prompt}], tools=tools or NOT_GIVEN)
 
     aggregators = LLMContextAggregatorPair(
@@ -52,6 +54,7 @@ def build(
     return Pipeline(
         [
             transport.input(),
+            *([frame_saver] if frame_saver is not None else []),
             stt,
             VADFallback(),
             aggregators.user(),

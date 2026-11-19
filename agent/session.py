@@ -25,6 +25,7 @@ class Session:
 
     transport: str
     vision: bool
+    save_frames: bool
     participant: str
     language: str
     scenario: str
@@ -42,6 +43,11 @@ def _parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="subscribe to the client's camera track (default: on)",
+    )
+    parser.add_argument(
+        "--save-frames",
+        action="store_true",
+        help="write every camera frame to logs/frames/<session>/ as PNG, for testing (needs --vision)",
     )
     parser.add_argument("--participant", help="pseudonymous participant ID, such as P04")
     parser.add_argument("--language", choices=list(LANGUAGES), help=f"default: {DEFAULT_LANGUAGE}")
@@ -68,6 +74,8 @@ def resolve() -> Session:
     """Settle every choice, asking the operator for whatever the command line left open."""
     parser = _parser()
     args = parser.parse_args()
+    if args.save_frames and not args.vision:
+        parser.error("--save-frames needs --vision.")
     picks = {field: getattr(args, field) for field in FIELDS}
 
     # A model or scenario with a single entry has nothing to decide, but participant and language always need an answer.
@@ -96,4 +104,4 @@ def resolve() -> Session:
         parser.error(error)
 
     picks["participant"] = roster.normalise(picks["participant"])
-    return Session(transport=args.transport, vision=args.vision, **picks)
+    return Session(transport=args.transport, vision=args.vision, save_frames=args.save_frames, **picks)

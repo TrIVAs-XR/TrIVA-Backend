@@ -10,6 +10,7 @@ dependencies = [
     "loguru>=0.7.3",
     "python-dotenv>=1.2.3",
     "sv-ttk>=2.6.1",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]
