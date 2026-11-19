@@ -50,7 +50,7 @@ The Unity client is a separate project. This section is what both sides hold to.
 
 Connecting:
 
-- Unity fetches its connection details from `POST /getToken` on port 8080, LiveKit's standard token endpoint format: a body naming `room_name`, `participant_identity` and `participant_name`, or an empty one to take the configured room and the identity `unity`. It is answered with `server_url` and `participant_token`. The Unity SDK's `TokenSourceEndpoint` speaks this already.
+- Unity fetches its connection details from `POST /getToken` on port 8080, LiveKit's standard token endpoint format: a body naming `room_name`, `participant_identity` and `participant_name`, or an empty one to take the configured room and the identity `unity`. It is answered with `server_url` and `participant_token`. The LiveKit Unity SDK speaks this already.
 
 Messages:
 
@@ -71,8 +71,8 @@ Unity to agent:
 
 - `metric`: a measurement, written to the study log as sent, so Unity adds one without a backend change. By convention `d` carries a `name`.
 - `game-event`: a full snapshot of the game's state, taken only by a scenario with a game. What `d` holds and how each event is reacted to is in that scenario's `README.md`.
-- Participant inputs (`world.CLIENT_INPUTS`), each carrying that input's full current state, so only the newest of a type counts. Written to the study log as sent; nothing acts on them yet. `held`: `{"left": <object>, "right": <object>}`, sent whenever a grab starts or ends or a held object changes, `null` for an empty hand.
-- An object is described as `{"id": ..., "kind": ..., ...}`: the ID Unity's `ReferableObject` gives it, unique among the loaded objects, its kind, and whatever its scenario adds (a Lab flask adds `shape` and `substance`). An object Unity cannot refer to is `{"id": null, "kind": "unknown"}`. The ID is how either side names an object to the other.
+- Participant inputs (`world.CLIENT_INPUTS`), each carrying that input's full current state, so only the newest of a type counts. Written to the study log as sent; nothing acts on them yet. `held`: `{"left": <object>, "right": <object>}`, sent whenever a grab starts or ends or a held object changes, `null` for an empty hand. `pointing`: `{"left": <object>, "right": <object>}`, the object each hand has pointed at steadily for a moment, sent whenever either target changes or a pointed object changes, `null` for a hand that points at nothing or holds something.
+- An object is described as `{"id": ..., "kind": ..., ...}`: an ID unique among the loaded objects, its kind, and whatever its scenario adds (a Lab flask adds `shape` and `substance`). An object Unity cannot refer to is `{"id": null, "kind": "unknown", "name": ...}`: named, but without an ID. The ID is how either side names an object to the other.
 - Any other client-message type is logged as unhandled.
 
 Camera: Unity publishes its camera as an ordinary video track, low resolution and low frame rate, and leaves it open. `--vision` decides whether the agent subscribes. Frames are held and never reach the LLM.

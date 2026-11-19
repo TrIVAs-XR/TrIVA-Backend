@@ -19,7 +19,7 @@ METRIC = "metric"
 GAME_EVENT = "game-event"
 
 # The RTVI client-message types Unity sends a participant input under, each with that input's full current state, as {"t": "held", "d": {"left": ..., "right": ...}}. They are logged as sent; nothing acts on them yet.
-CLIENT_INPUTS = {"held"}
+CLIENT_INPUTS = {"held", "pointing"}
 
 # The RTVI server-message type the agent sends the session's settings under, as {"t": "session", "d": {...}}.
 SESSION = "session"
