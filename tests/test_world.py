@@ -1,4 +1,4 @@
-"""What the agent and the client tell each other outside of audio: each LLM thought, sent whole, and the client's inputs, logged as sent."""
+"""What the agent and the client tell each other outside of audio: each LLM thought, sent whole, and the client's inputs, logged as sent and handed to the inputs."""
 
 import json
 
@@ -45,6 +45,18 @@ class _Worker:
         """Accept an observer without running it."""
 
 
+class _Inputs:
+    """Stand-in for the inputs, recording each client input handed to them."""
+
+    def __init__(self):
+        """Start with nothing received."""
+        self.received = []
+
+    async def receive(self, kind, data):
+        """Record one client input."""
+        self.received.append((kind, data))
+
+
 async def _push(relay: ThoughtRelay, frame):
     """Show the relay one frame moving downstream."""
     await relay.on_push_frame(
@@ -70,10 +82,12 @@ async def test_a_client_input_is_logged_as_sent(tmp_path, input_type):
     path = tmp_path / "study.jsonl"
     study = StudyLog(path)
     worker = _Worker()
-    attach(worker, greeting=None, study=study, settings={}, game=None)
+    inputs = _Inputs()
+    attach(worker, greeting=None, study=study, settings={}, game=None, inputs=inputs)
     hands = {"left": None, "right": {"id": "flask-3", "kind": "flask", "shape": "beaker", "substance": None}}
     await worker.rtvi.handlers["on_client_message"](worker.rtvi, ClientMessage(msg_id="1", type=input_type, data=hands))
     study.close()
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    inputs = [line for line in lines if line["event"] == "client_input"]
-    assert [(line["input"], line["data"]) for line in inputs] == [(input_type, hands)]
+    logged = [line for line in lines if line["event"] == "client_input"]
+    assert [(line["input"], line["data"]) for line in logged] == [(input_type, hands)]
+    assert inputs.received == [(input_type, hands)]

@@ -19,12 +19,15 @@ from pipecat.frames.frames import (
     UserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import FramePushed
+from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.frame_processor import FrameDirection
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import LLMService
+from pipecat.tests.utils import run_test
 
 from agent import game as game_module
 from agent.game import HEADER, STARTED, Game, Reaction
+from agent.inputs import ContextCapture
 from agent.observability.study_log import StudyLog
 
 GRACE_S = 0.01
@@ -422,3 +425,25 @@ async def test_a_start_signal_in_time_is_not_warned_about(monkeypatch, game, war
     await asyncio.sleep(TIMEOUT_S * 1.5)
 
     assert warnings == []
+
+
+class _PipelineLLM(LLMService):
+    """Stand-in for the LLM inside a real pipeline: takes context frames and passes every other frame on."""
+
+    async def process_frame(self, frame, direction):
+        """Consume a context frame as the LLM would, without running a model."""
+        await FrameProcessor.process_frame(self, frame, direction)
+        if not isinstance(frame, LLMContextFrame):
+            await self.push_frame(frame, direction)
+
+
+async def test_a_run_through_a_real_pipeline_settles_a_held_reaction(opened, worker):
+    """In a running pipeline, with the context capture between the user aggregator and the LLM, a run on a context holding the snapshot still answers it."""
+    await _push(opened, BotStartedSpeakingFrame())
+    await opened.receive(_snapshot("when_idle"))
+    pair = ContextCapture()
+    await run_test(Pipeline([pair.before_llm(), _PipelineLLM()]), frames_to_send=[LLMContextFrame(context=LLMContext())], observers=[opened])
+    await _push(opened, LLMFullResponseEndFrame())
+    await _push(opened, BotStoppedSpeakingFrame())
+    await asyncio.sleep(SETTLE_S)
+    assert worker.runs() == 0

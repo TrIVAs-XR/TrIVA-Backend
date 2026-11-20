@@ -281,6 +281,12 @@ def test_every_voice_states_which_session_languages_it_speaks():
         assert languages <= LANGUAGES.keys()
 
 
+def test_every_model_states_where_it_runs():
+    """A model missing from the location table would leave the input record unable to say where an input was processed."""
+    assert catalog.LOCATIONS.keys() == catalog.STT.keys() | catalog.LLM.keys() | catalog.TTS.keys()
+    assert set(catalog.LOCATIONS.values()) <= {"local", "cloud"}
+
+
 def test_the_default_scenario_is_one_the_registry_holds():
     """A default naming a scenario that does not exist would fail only at startup."""
     assert scenarios.DEFAULT in scenarios.SCENARIOS

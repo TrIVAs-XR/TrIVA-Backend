@@ -12,6 +12,7 @@ from pipecat.workers.runner import WorkerRunner
 from agent import config, frame_saver, join, livekit_server, nemotron_server, pipeline, roster, scenarios, session, world
 from agent.config import AUDIO_IN, AUDIO_OUT
 from agent.game import START_TASK, Game
+from agent.inputs import ContextCapture, Inputs
 from agent.observability import debug_log
 from agent.observability.llm_exchange import LLMExchange
 from agent.observability.study_log import StudyLog
@@ -96,6 +97,7 @@ async def main():
             frames_path = frame_saver.DIRECTORY / study_path.stem
             saver = frame_saver.FrameSaver(frames_path)
             logger.info(f"Saving camera frames to {frames_path}")
+        capture = ContextCapture()
         worker = PipelineWorker(
             pipeline.build(
                 transport,
@@ -104,6 +106,7 @@ async def main():
                 tts,
                 scenario.system_prompt(run.language),
                 [START_TASK] if intro else [],
+                capture,
                 saver,
             ),
             params=PipelineParams(
@@ -123,7 +126,9 @@ async def main():
             if intro:
                 llm.register_function(START_TASK.name, game.start_task)
         greeting = scenario.greeting[run.language] if scenario.greeting else None
-        world.attach(worker, greeting, study, settings, game)
+        inputs = Inputs(worker.queue_frames, worker.rtvi, study, capture, catalog.LOCATIONS[run.stt], catalog.LOCATIONS[run.llm])
+        worker.add_observer(inputs)
+        world.attach(worker, greeting, study, settings, game, inputs)
 
         runner = WorkerRunner()
         await runner.add_workers(worker)

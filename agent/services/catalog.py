@@ -102,5 +102,16 @@ TTS: dict[str, Callable[[Config, Language], TTSService]] = {
 # The session languages each voice can speak. Kokoro has no German voice, so a German session refuses it rather than speaking English.
 TTS_LANGUAGES = {"elevenlabs-flash": {"en", "de"}, "kokoro": {"en"}}
 
+# Where each model runs, "local" on this machine or "cloud" at its provider, so the per-call input record can say where each input was processed.
+LOCATIONS = {
+    "voxtral": "cloud",
+    "whisper-turbo": "local",
+    "nemotron": "local",
+    "mistral-small": "cloud",
+    "mistral-large": "cloud",
+    "elevenlabs-flash": "cloud",
+    "kokoro": "local",
+}
+
 # What a run uses when the operator names nothing, stated here rather than left to the order the registries happen to be in.
 DEFAULTS = {"stt": "whisper-turbo", "llm": "mistral-small", "tts": "elevenlabs-flash"}

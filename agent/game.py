@@ -71,7 +71,7 @@ class Game(BaseObserver):
         **kwargs,
     ):
         """Take the scenario's reaction table, the worker's way to queue frames, the study log every event is written to, and whether the session opens with an intro that holds every reaction until start_task."""
-        super().__init__(observe_every_push=False, **kwargs)
+        super().__init__(observe_every_push=True, **kwargs)
         self._reaction = reaction
         self._queue = queue
         self._study = study
@@ -171,11 +171,16 @@ class Game(BaseObserver):
     async def on_push_frame(self, data: FramePushed):
         """Follow who is speaking and whether a reply is underway, and let a held reaction run once neither is."""
         frame = data.frame
+        # A context frame counts only on its push into the LLM, which may follow other processors; every other frame counts on its first push only.
+        if isinstance(frame, LLMContextFrame) and not isinstance(data.destination, LLMService):
+            return
+        if not isinstance(frame, LLMContextFrame) and not data.first_push:
+            return
         if isinstance(frame, UserStartedSpeakingFrame):
             self._user_speaking = True
         elif isinstance(frame, UserStoppedSpeakingFrame):
             self._user_speaking = False
-        elif isinstance(frame, LLMContextFrame) and isinstance(data.destination, LLMService):
+        elif isinstance(frame, LLMContextFrame):
             self._replying = True
             # A run built on a context that already holds the snapshot answers it, so the held reaction is settled.
             if self._entered is not None and frame.id > self._entered:
