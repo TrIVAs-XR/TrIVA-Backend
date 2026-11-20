@@ -258,6 +258,29 @@ async def test_a_reply_cut_off_is_interrupted(inputs, worker, rtvi, capture):
     assert [r["state"] for r in rtvi.records() if r["id"] == 1] == ["sent", "interrupted"]
 
 
+async def test_a_question_whose_reply_was_cut_off_unheard_counts_again(inputs, worker, rtvi, capture):
+    """When an interruption stops a reply before any of it reaches the context, the next call answers both questions and its record lists both."""
+    worker.messages.append({"role": "user", "content": "Which flask do you mean?"})
+    await _call(inputs, worker, capture)
+    await _push(inputs, InterruptionFrame())
+    worker.messages.append({"role": "user", "content": "This one on the left."})
+    await _call(inputs, worker, capture)
+    second = rtvi.records("sent")[1]
+    assert second["trigger"] == "user_turn"
+    assert [e["data"] for e in second["inputs"] if e["input"] == "transcript"] == ["Which flask do you mean?", "This one on the left."]
+
+
+async def test_a_question_whose_reply_was_partly_heard_does_not_count_again(inputs, worker, rtvi, capture):
+    """A reply cut off after some of it was spoken stays in the context, so the question before it is not listed in the next call."""
+    worker.messages.append({"role": "user", "content": "Which flask do you mean?"})
+    await _call(inputs, worker, capture)
+    worker.messages.append({"role": "assistant", "content": "The one"})
+    worker.messages.append({"role": "user", "content": "This one on the left."})
+    await _call(inputs, worker, capture)
+    second = rtvi.records("sent")[1]
+    assert [e["data"] for e in second["inputs"] if e["input"] == "transcript"] == ["This one on the left."]
+
+
 async def test_the_next_draft_is_sent_right_after_a_call(inputs, worker, rtvi, capture):
     """Inputs that stay in the context are shown as the next call's draft without waiting for a change."""
     await inputs.receive("held", HANDS)

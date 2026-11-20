@@ -216,11 +216,12 @@ class Inputs(BaseObserver):
             self._study.write("input_record", **record)
 
     def _read(self, messages: list) -> tuple[str, list[dict]]:
-        """Work out from the context an LLM call reads what started the call and which inputs it got: a new user message, else a tool result last, else a new game snapshot."""
+        """Work out from the context an LLM call reads what started the call and which inputs it got: a new user message, else a tool result last, else a new game snapshot. Every user message after the last reply or tool result counts as a transcript, including one whose reply was cut off unheard."""
         inputs: list[dict] = []
         new_user = new_game = False
         last_role = None
-        for message in messages:
+        replied = max((i for i, m in enumerate(messages) if isinstance(m, dict) and m.get("role") in ("assistant", "tool")), default=-1)
+        for index, message in enumerate(messages):
             text = _text(message)
             new = id(message) not in self._seen
             if text is not None and (found := _client_input(text)) is not None:
@@ -229,8 +230,8 @@ class Inputs(BaseObserver):
                 continue
             role = message.get("role") if isinstance(message, dict) else None
             last_role = role
-            if role == "user" and text is not None and new:
-                new_user = True
+            if role == "user" and text is not None and index > replied:
+                new_user = new_user or new
                 reading, words = _split_reading(text)
                 if reading is not None:
                     inputs.append(self._entry("emotion", reading))
@@ -269,7 +270,7 @@ class Inputs(BaseObserver):
         self._id += 1
         self._draft = []
         self._draft_sent = False
-        if any(entry["input"] == "transcript" for entry in inputs):
+        if trigger == "user_turn":
             self._speaking = False
         await self._update_draft()
 
