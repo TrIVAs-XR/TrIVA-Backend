@@ -26,6 +26,8 @@ A fixed greeting, spoken verbatim once the client is ready, so every participant
 - English: "Hi, great to have you here! I'm Iva, an AI agent, and what I hear, say and answer is handled by several models. I can make mistakes, so if something I say seems off, just ask again. I'll be supervising you in the lab today. What should I call you?"
 - German: "Hallo, schön, dass du da bist! Ich bin Iva, eine KI-Agentin, und was ich höre, sage und antworte, übernehmen mehrere Modelle. Ich kann mich irren, also frag ruhig nach, wenn dir etwas komisch vorkommt. Ich betreue dich heute hier im Labor. Wie darf ich dich nennen?"
 
+The `lab-dev` scenario is the same lab with a short greeting for development runs, never for study sessions: "Hi, I'm Iva, an AI agent. What should I call you?" / "Hallo, ich bin Iva, eine KI-Agentin. Wie darf ich dich nennen?"
+
 An intro follows, in Iva's own words over a few exchanges: she greets the participant by the name they give, asks one light question, and asks whether they are ready to start mixing. Once they are, she calls `start_task`, explains the task in two or three sentences, and gives the first step of the compound in progress. The explanation covers how many compounds there are, that each shows a flask and two codes on the panel, that the bottles do not reveal a code so the participant asks her, and that she names where the flask goes once both reagents are in. Asking about the task counts as ready.
 
 During the intro the participant may already handle the equipment. Every snapshot still enters the context, but none is reacted to, and Iva gives no instructions. The name the participant gives appears in the transcripts of the study log.

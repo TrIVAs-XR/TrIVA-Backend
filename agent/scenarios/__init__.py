@@ -22,6 +22,7 @@ class Scenario:
 SCENARIOS = {
     "chat": Scenario(system_prompt=chat.system_prompt, greeting=chat.GREETING),
     "lab": Scenario(system_prompt=lab.system_prompt, greeting=lab.GREETING, reaction=lab.reaction),
+    "lab-dev": Scenario(system_prompt=lab.system_prompt, greeting=lab.DEV_GREETING, reaction=lab.reaction),
 }
 
 DEFAULT = "chat"

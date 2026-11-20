@@ -13,6 +13,12 @@ GREETING = {
     "de": "Hallo, schön, dass du da bist! Ich bin Iva, eine KI-Agentin, und was ich höre, sage und antworte, übernehmen mehrere Modelle. Ich kann mich irren, also frag ruhig nach, wenn dir etwas komisch vorkommt. Ich betreue dich heute hier im Labor. Wie darf ich dich nennen?",
 }
 
+# The short greeting of the lab-dev scenario, for development runs.
+DEV_GREETING = {
+    "en": "Hi, I'm Iva, an AI agent. What should I call you?",
+    "de": "Hallo, ich bin Iva, eine KI-Agentin. Wie darf ich dich nennen?",
+}
+
 # The reaction to every event the client sends, once the intro is over.
 REACTIONS = {
     "state": Reaction.SILENT,
