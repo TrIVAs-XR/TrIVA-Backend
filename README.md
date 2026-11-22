@@ -71,6 +71,25 @@ Each session writes a study log and a debug log under `logs/`. What each holds i
 
 To check what the client's camera track shows, start the agent with `--vision --save-frames`: every frame is written as a PNG to `logs/frames/<session>/`.
 
+The [TrIVA Inspector](#triva-inspector) shows both logs turn by turn while a session runs.
+
+### TrIVA Inspector
+
+A local web page for following a session turn by turn while it runs, or looking back at an earlier one. Start it in a second console:
+
+```powershell
+uv run python -m tools.inspector
+```
+
+![TrIVA Inspector: a session's turns with each LLM call's inputs and latency stages, and the session statistics on the side.](docs/inspector.png)
+
+- **Turns:** what was said and thought, tool calls, game events, held and pointing changes, each LLM call with its inputs and the context it was given, and the latency stage by stage.
+- **Session and filters:** on the left, the session's settings, and filters for turns (interrupted, tool calls, slow responses, turn range, text) and for the kinds of row shown.
+- **Session statistics:** connections, turns and words, latency, LLM calls and inputs, beside the turns.
+- **Overview** (`/overview`): all sessions side by side, grouped by LLM, STT, TTS, scenario, language or commit.
+
+It follows the newest session on `http://localhost:8081` and only reads the logs. `--port`, `--logs` and `--no-browser` change the port, the log folder and whether a browser opens.
+
 ### Tests
 
 The unit tests need nothing running:

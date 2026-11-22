@@ -1,0 +1,1074 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrIVA Inspector</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2230; --muted: #6a7385; --line: #e2e5eb;
+  --accent: #2f6fde; --user: #e8f0fe; --agent: #eef7ee; --thought: #f5f1fb;
+  --warn: #b26a00; --warn-bg: #fff4e0; --bad: #c0392b; --bad-bg: #fdecea; --good: #2e8b57;
+  --local: #2e8b57; --cloud: #2f6fde; --client: #8a5cc2;
+  --bar: #9bb7ec; --bar-setting: #d6dbe4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171d; --panel: #1c2028; --ink: #e3e6ec; --muted: #8d95a5; --line: #2c323d;
+    --accent: #6b9cf0; --user: #1d2a40; --agent: #1d3224; --thought: #2a2338;
+    --warn: #f0b45a; --warn-bg: #3a2e18; --bad: #f08a7e; --bad-bg: #3d2220; --good: #6fcf97;
+    --local: #6fcf97; --cloud: #6b9cf0; --client: #b893e8;
+    --bar: #4a6ba8; --bar-setting: #3a414e;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+h1 { font-size: 15px; margin: 0; }
+select, input[type=search], input[type=number] { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+select { max-width: 100%; }
+.step { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
+.step:disabled { color: var(--muted); cursor: default; opacity: .5; }
+.pick { display: inline-flex; gap: 4px; align-items: center; max-width: 100%; }
+label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.dot.on { background: var(--good); } .dot.wait { background: var(--warn); }
+.meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; font-size: 12.5px; margin-top: 8px; }
+.meta > div { overflow-wrap: anywhere; }
+.meta .l { color: var(--muted); }
+#left .pick { display: flex; width: 100%; }
+#left .pick select { flex: 1 1 auto; min-width: 0; }
+#left .follow { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+#left label { display: flex; margin: 4px 0; font-size: 13px; }
+#left #search { width: 100%; margin-bottom: 2px; }
+#left input[type=number] { width: 58px; padding: 1px 4px; }
+#left .range { color: var(--muted); font-size: 13px; margin: 4px 0; }
+#kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+#kinds label { margin: 2px 0; }
+.layout { max-width: 1760px; margin: 0 auto; padding: 14px 16px 60px; display: grid; grid-template-columns: 250px minmax(0, 1fr) 330px; grid-template-areas: "left main side"; gap: 16px; align-items: start; }
+#left { grid-area: left; } main { grid-area: main; } #side { grid-area: side; }
+main { min-width: 0; }
+aside { position: sticky; top: calc(var(--head, 90px) + 14px); max-height: calc(100vh - var(--head, 90px) - 28px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+aside > button { all: unset; display: block; width: 100%; box-sizing: border-box; padding: 8px 12px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line); }
+.box { padding: 8px 12px 10px; border-bottom: 1px solid var(--line); }
+.box:last-child { border-bottom: 0; }
+.box h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 5px; font-weight: 600; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; font-size: 12.5px; }
+.kv .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.kv .sub { color: var(--muted); padding-left: 10px; }
+.kv .sub + .v { font-weight: 400; }
+.caption { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.hbars { display: grid; grid-template-columns: minmax(70px, 120px) 1fr auto; gap: 2px 8px; font-size: 12px; align-items: center; margin-top: 4px; }
+.hbars .track { height: 8px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.hbars .fill { height: 100%; background: var(--bar); border-radius: 3px; min-width: 1px; }
+.hbars .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbars .s { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.spark { display: flex; align-items: flex-end; gap: 1px; height: 46px; margin-top: 6px; border-bottom: 1px solid var(--line); }
+.spark div { flex: 1 1 0; background: var(--bar); min-height: 1px; cursor: pointer; border-radius: 2px 2px 0 0; }
+.spark div.slow { background: var(--warn); }
+.spark div:hover { background: var(--accent); }
+.conns { font-size: 12px; margin-top: 4px; }
+.conns div { padding: 1px 0; }
+.ev.conn { grid-template-columns: 58px 1fr; background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 4px 6px; margin: 2px 0; }
+.ev.conn.first { background: transparent; color: var(--muted); padding: 4px 0; }
+.nav { color: var(--accent); text-decoration: none; font-size: 13px; }
+.nav:hover { text-decoration: underline; }
+body.ov .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main"; max-width: 1640px; }
+body.ov aside { display: none; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 12px; font-size: 13px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.panel h2 { font-size: 13px; margin: 0 0 6px; }
+.scroll { overflow-x: auto; }
+.tbl { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tbl th, .tbl td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.tbl th { color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+.tbl th.text, .tbl td.text { text-align: left; }
+.tbl th.sorted { color: var(--ink); }
+.tbl tbody tr:hover { background: var(--bg); }
+.tbl tr.open { cursor: pointer; }
+.tbl td.slow { color: var(--warn); }
+.timeline { display: flex; align-items: flex-end; gap: 2px; height: 90px; border-bottom: 1px solid var(--line); }
+.timeline div { flex: 1 1 0; max-width: 28px; background: var(--bar); border-radius: 2px 2px 0 0; min-height: 1px; cursor: pointer; }
+.timeline div.slow { background: var(--warn); }
+.timeline div:hover { background: var(--accent); }
+.legend { color: var(--muted); font-size: 12px; margin-top: 4px; }
+@media (max-width: 1300px) {
+  .layout { grid-template-columns: 250px minmax(0, 1fr); grid-template-areas: "left side" "left main"; }
+  #side { position: static; max-height: none; }
+  #side > button { cursor: pointer; border-bottom: 0; }
+  #side > button::after { content: " +"; color: var(--muted); }
+  #side.open > button { border-bottom: 1px solid var(--line); }
+  #side.open > button::after { content: " -"; }
+  #side:not(.open) > .boxes { display: none; }
+}
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: 1fr; grid-template-areas: "left" "side" "main"; }
+  aside { position: static; max-height: none; }
+  aside > button { cursor: pointer; border-bottom: 0; }
+  aside > button::after { content: " +"; color: var(--muted); }
+  aside.open > button { border-bottom: 1px solid var(--line); }
+  aside.open > button::after { content: " -"; }
+  aside:not(.open) > .boxes { display: none; }
+}
+.empty { color: var(--muted); text-align: center; padding: 40px 0; }
+.turn { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+.turn > .head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.turn > .head h2 { font-size: 14px; margin: 0; }
+.turn .num { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.badge { font-size: 11.5px; border-radius: 10px; padding: 1px 8px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.badge.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.badge.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.badge.live { background: transparent; color: var(--good); border-color: var(--good); }
+.events { padding: 6px 12px 10px; }
+.ev { display: grid; grid-template-columns: 58px 92px 1fr; gap: 8px; padding: 4px 0; align-items: start; }
+.ev + .ev { border-top: 1px dashed var(--line); }
+.ev .t { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.ev .k { color: var(--muted); font-size: 12px; padding-top: 2px; }
+.ev .body { min-width: 0; overflow-wrap: anywhere; }
+.say { border-radius: 8px; padding: 4px 9px; display: inline-block; max-width: 100%; white-space: pre-wrap; }
+.say.user { background: var(--user); } .say.agent { background: var(--agent); } .say.thought { background: var(--thought); font-style: italic; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.chip { font-size: 12px; border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 5px; padding: 0 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.local { border-left-color: var(--local); } .chip.cloud { border-left-color: var(--cloud); } .chip.client { border-left-color: var(--client); }
+.chip.dropped { text-decoration: line-through; color: var(--muted); border-style: dashed; }
+details { margin-top: 3px; }
+summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
+pre { margin: 4px 0 0; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.msg { margin-top: 4px; }
+.msg .role { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.dim { color: var(--muted); }
+.err { color: var(--bad); }
+.lat { padding: 6px 12px 10px; border-top: 1px solid var(--line); }
+.lat .title { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.gantt { display: grid; grid-template-columns: minmax(90px, 170px) 1fr 52px; gap: 2px 8px; font-size: 12px; align-items: center; }
+.gantt .track { position: relative; height: 10px; background: var(--bg); border-radius: 3px; }
+.gantt .seg { position: absolute; top: 0; bottom: 0; background: var(--bar); border-radius: 3px; min-width: 2px; }
+.gantt .seg.setting { background: var(--bar-setting); }
+.gantt .s { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.gantt .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notice { color: var(--muted); font-size: 12.5px; text-align: center; margin: 8px 0 14px; }
+@media (max-width: 640px) {
+  .ev { grid-template-columns: 1fr; gap: 0; }
+  .ev .t, .ev .k { display: inline; padding: 0; }
+  .gantt { grid-template-columns: 90px 1fr 44px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 id="title">TrIVA Inspector</h1>
+    <a class="nav" id="nav" href="/overview">Overview</a>
+  </div>
+</header>
+<div class="layout">
+  <aside id="left">
+    <button type="button">Session and filters</button>
+    <div class="boxes">
+      <section class="box">
+        <h3>Session</h3>
+        <div class="pick">
+          <button type="button" class="step" id="older" title="Older session" aria-label="Older session">&lt;</button>
+          <select id="picker" aria-label="Session"></select>
+          <button type="button" class="step" id="newer" title="Newer session" aria-label="Newer session">&gt;</button>
+        </div>
+        <div class="follow"><label><input type="checkbox" id="follow" checked> Follow newest</label><span class="dot" id="dot" title="Not connected"></span></div>
+        <div class="meta" id="meta"></div>
+      </section>
+      <div id="filters">
+        <section class="box">
+          <h3>Turns</h3>
+          <input type="search" id="search" placeholder="Search text" aria-label="Search text">
+          <label><input type="checkbox" id="onlyInterrupted"> Interrupted</label>
+          <label><input type="checkbox" id="onlyTools"> With tool calls</label>
+          <label><input type="checkbox" id="onlySlow"> Response over <input type="number" id="slowS" min="0" step="0.5" aria-label="Response threshold in seconds"> s</label>
+          <div class="range">From turn <input type="number" id="fromTurn" min="0" placeholder="first" aria-label="First turn"> to <input type="number" id="toTurn" min="0" placeholder="last" aria-label="Last turn"></div>
+        </section>
+        <section class="box">
+          <h3>Rows</h3>
+          <div id="kinds"></div>
+        </section>
+      </div>
+    </div>
+  </aside>
+  <main id="main"><div class="empty">Loading sessions...</div></main>
+  <aside id="side"><button type="button">Session statistics</button><div class="boxes" id="sideBody"></div></aside>
+</div>
+<script>
+"use strict";
+
+// Debug LLM calls and input records closer than this are taken as the same call.
+const MATCH_S = 1.5;
+// A session without session_end counts as live while its log changed this recently.
+const LIVE_S = 120;
+// A response slower than this is marked in the turn header and the latency chart.
+const SLOW_S = 3;
+const SESSIONS_POLL_MS = 2000;
+
+const $ = (id) => document.getElementById(id);
+const opened = new Set();
+let listed = [];
+let source = null;
+let s = null;
+let frame = 0;
+let pickerSignature = "";
+
+/** Builds a DOM element; strings become text nodes, so log content is never parsed as HTML. */
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === "class") el.className = value;
+    else if (key.startsWith("on")) el.addEventListener(key.slice(2), value);
+    else el.setAttribute(key, value === true ? "" : value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    el.append(child instanceof Node ? child : String(child));
+  }
+  return el;
+}
+
+/** Returns a collapsible block whose open state survives re-rendering, keyed by `key`. */
+function fold(key, label, ...content) {
+  const el = h("details", { "data-key": key, open: opened.has(key) }, h("summary", {}, label), ...content);
+  el.addEventListener("toggle", () => (el.open ? opened.add(key) : opened.delete(key)));
+  return el;
+}
+
+const json = (value) => h("pre", {}, JSON.stringify(value, null, 2));
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour12: false });
+const secs = (value, digits = 2) => (typeof value === "number" ? `${value.toFixed(digits)} s` : "-");
+
+/** Names a held or pointed-at object briefly: its ID, or its name for one without an ID, and its kind. */
+function object(o) {
+  if (!o) return "-";
+  return `${o.id ?? o.name ?? "?"} (${o.kind ?? "?"})`;
+}
+
+/** Summarises a per-hand input such as held or pointing in one line. */
+function hands(data) {
+  if (!data || typeof data !== "object") return JSON.stringify(data);
+  return `left ${object(data.left)}, right ${object(data.right)}`;
+}
+
+/** Summarises a game snapshot by its event and the recipe's status. */
+function game(data) {
+  if (!data || typeof data !== "object") return JSON.stringify(data);
+  const parts = [];
+  if (data.event) parts.push(data.event + (data.detail ? ` ${typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)}` : ""));
+  if (data.recipe) parts.push(`recipe ${data.recipe.index + 1}/${data.recipe.count}: ${data.recipe.status}`);
+  if (data.complete) parts.push("complete");
+  return parts.join(" | ") || "snapshot";
+}
+
+/** Summarises one input of an input record for its chip. */
+function inputText(entry) {
+  const data = entry.data;
+  if (entry.input === "held" || entry.input === "pointing") return `${entry.input}: ${hands(data)}`;
+  if (entry.input === "game") return `game: ${game(data)}`;
+  return `${entry.input}: ${typeof data === "string" ? data : JSON.stringify(data)}`;
+}
+
+/** Fresh state for one session's stream. */
+function fresh(session) {
+  return { session, start: null, end: null, study: [], debug: [], records: new Map(), turns: new Map() };
+}
+
+/** Adds a batch of study and debug records to a session's state. */
+function take(st, batch) {
+  for (const r of batch.study) {
+    st.study.push(r);
+    if (r.event === "session_start") st.start = r;
+    else if (r.event === "session_end") st.end = r;
+    if (r.event === "input_record" && r.id !== undefined) {
+      const entry = st.records.get(r.id) || {};
+      if (r.state === "sent") entry.sent = r; else entry.outcome = r;
+      st.records.set(r.id, entry);
+    }
+  }
+  st.debug.push(...batch.debug);
+}
+
+/** Groups the debug log's LLM records into calls: an input, then its tool calls, output and tool results. */
+function exchanges(debug) {
+  const calls = [];
+  let current = null;
+  for (const r of [...debug].sort((a, b) => a.ts - b.ts)) {
+    if (r.kind === "LLM input") {
+      current = { ts: r.ts, input: r, calls: [], results: [], output: null };
+      calls.push(current);
+    } else if (r.kind === "LLM tool result") {
+      const owner = [...calls].reverse().find((c) => c.calls.some((t) => t.name === r.name) && !c.results.some((x) => x.name === r.name));
+      (owner || calls[calls.length - 1] || { results: [] }).results.push(r);
+    } else {
+      if (!current) {
+        current = { ts: r.ts, input: null, calls: [], results: [], output: null };
+        calls.push(current);
+      }
+      if (r.kind === "LLM tool call") current.calls.push(r);
+      else if (r.kind === "LLM output") { current.output = r; current = null; }
+    }
+  }
+  return calls;
+}
+
+/** Returns the turn the study log was in at a moment, from the last study line written before it. */
+function turnAt(st, ts) {
+  let turn = 0;
+  for (const r of st.study) {
+    if (r.ts > ts) break;
+    if (typeof r.turn === "number") turn = r.turn;
+  }
+  return turn;
+}
+
+/** Builds a session's per-turn model: each turn's study events, its LLM calls matched to input records, and its measures. */
+function model(st) {
+  const turns = new Map();
+  const get = (n) => {
+    if (!turns.has(n)) turns.set(n, { n, events: [], started: null, ended: null, latency: null, breakdown: null, interruption: null, firstSpeech: null, tools: 0 });
+    return turns.get(n);
+  };
+  for (const r of st.study) {
+    if (r.event === "session_start" || r.event === "session_end") continue;
+    const t = get(typeof r.turn === "number" ? r.turn : 0);
+    switch (r.event) {
+      case "turn_started": t.started = r; break;
+      case "turn_ended": t.ended = r; break;
+      case "response_latency": t.latency = r.seconds; break;
+      case "latency_breakdown": t.breakdown = r; break;
+      case "interruption_latency": t.interruption = r.seconds; break;
+      case "first_speech_latency": t.firstSpeech = r.seconds; break;
+      case "input_record": if (r.state === "sent") t.events.push(r); break;
+      case "tool_call": t.tools++; t.events.push(r); break;
+      default: t.events.push(r);
+    }
+  }
+  const unused = new Set(exchanges(st.debug));
+  const records = [...st.records.values()].map((entry) => entry.sent).filter(Boolean).sort((a, b) => a.ts - b.ts);
+  for (const r of records) {
+    let best = null;
+    for (const c of unused) if (c.input && Math.abs(c.ts - r.ts) < MATCH_S && (!best || Math.abs(c.ts - r.ts) < Math.abs(best.ts - r.ts))) best = c;
+    r._call = best;
+    unused.delete(best);
+  }
+  // Pairs a call the debug log has only the output of with the latest unpaired record sent before that output.
+  for (const c of [...unused].filter((x) => !x.input)) {
+    const owner = records.filter((r) => !r._call && r.ts <= c.ts).pop();
+    if (owner) { owner._call = c; unused.delete(c); }
+  }
+  for (const c of unused) get(turnAt(st, c.ts)).events.push({ event: "_llm", ts: c.ts, call: c });
+  for (const t of turns.values()) {
+    t.events.sort((a, b) => a.ts - b.ts);
+    t.reconnect = t.events.some((r) => r.event === "client_ready" && r._conn?.n > 1);
+  }
+  return [...turns.values()].sort((a, b) => a.n - b.n);
+}
+
+/** Lists the client's connections from a session's study log: when each became ready, when it left, and how long the client was away before it; without a client_disconnected line, the time away is estimated from the last line before the reconnect. */
+function connections(st) {
+  const list = [];
+  let previous = null;
+  for (const r of st.study) {
+    if (r.event === "client_ready") {
+      const before = list[list.length - 1];
+      const away = !before ? null : before.left ? { s: r.ts - before.left.ts, exact: true } : previous ? { s: r.ts - previous.ts, exact: false } : null;
+      const conn = { n: list.length + 1, ready: r, left: null, away };
+      r._conn = conn;
+      list.push(conn);
+    } else if (r.event === "client_disconnected") {
+      const conn = list[list.length - 1];
+      if (conn && !conn.left) conn.left = r;
+      r._conn = conn || null;
+    }
+    previous = r;
+  }
+  return list;
+}
+
+/** Shows one LLM message of a context, its text parts joined and anything else as JSON. */
+function message(m, key) {
+  let content = m.content;
+  if (Array.isArray(content)) content = content.map((p) => (p && p.type === "text" ? p.text : p && p.type ? `[${p.type}]` : JSON.stringify(p))).join("\n");
+  else if (typeof content !== "string") content = JSON.stringify(content, null, 2);
+  const extra = m.tool_calls ? `\ntool calls: ${JSON.stringify(m.tool_calls)}` : "";
+  const text = (content || "") + extra;
+  const body = m.role === "system" && text.length > 300 ? fold(key, `system prompt (${text.length} chars)`, h("pre", {}, text)) : h("pre", {}, text);
+  return h("div", { class: "msg" }, h("div", { class: "role" }, m.role || "?"), body);
+}
+
+/** Shows what the debug log holds of one LLM call: the context it got, its tools, tool calls and output. */
+function callDetails(call, key) {
+  const parts = [];
+  if (call.input) {
+    const messages = call.input.messages || [];
+    parts.push(fold(`${key}:ctx`, `context: ${messages.length} messages${call.input.speculation ? " (speculation)" : ""}`,
+      ...messages.map((m, i) => message(m, `${key}:m${i}`))));
+    const tools = call.input.tools || [];
+    if (tools.length) parts.push(fold(`${key}:tools`, `tools offered: ${tools.map((t) => t.name || t.function?.name || "?").join(", ")}`, json(tools)));
+  } else {
+    parts.push(h("div", { class: "dim" }, "The debug log has no input for this call."));
+  }
+  for (const c of call.calls) parts.push(h("div", {}, h("span", { class: "dim" }, "tool call "), `${c.name}(${JSON.stringify(c.arguments ?? {})})`));
+  for (const r of call.results) parts.push(h("div", { class: r.error ? "err" : "" }, h("span", { class: "dim" }, "tool result "), `${r.name}: ${JSON.stringify(r.error ?? r.result)}`));
+  if (call.output) parts.push(h("div", {}, h("span", { class: "dim" }, "output "), call.output.text ? h("span", { class: "say agent" }, call.output.text) : h("span", { class: "dim" }, "(no text)")));
+  return parts;
+}
+
+/** Renders one input record with the LLM call it was matched to. */
+function inputRecord(r, key, st) {
+  const outcome = st.records.get(r.id)?.outcome;
+  const state = outcome ? outcome.state : "sent";
+  const badge = state === "interrupted" ? "badge bad" : state === "answered" ? "badge" : "badge warn";
+  const chips = h("div", { class: "chips" },
+    ...(r.inputs || []).map((e) => h("span", { class: `chip ${e.where || ""}`, title: `${inputText(e)} (${e.where})` }, inputText(e))),
+    ...(r.dropped || []).map((d) => h("span", { class: "chip dropped", title: "meant for this call, not sent" }, typeof d === "string" ? d : d.input || JSON.stringify(d))));
+  const details = [json({ inputs: r.inputs, dropped: r.dropped })];
+  if (r._call) details.push(...callDetails(r._call, key));
+  return [
+    h("div", {}, `#${r.id} `, h("span", { class: "badge" }, r.trigger || "?"), " ", h("span", { class: "badge" }, r.llm || "?"), " ", h("span", { class: badge }, state),
+      r._call ? null : h("span", { class: "dim" }, "  no debug record")),
+    chips,
+    fold(key, "details", ...details),
+  ];
+}
+
+/** Renders one event row of a turn: the time since the turn began, its kind, and its content. */
+function row(r, t0, key, st) {
+  let kind = r.event;
+  let body;
+  switch (r.event) {
+    case "user_transcript": kind = "participant"; body = h("span", { class: "say user" }, r.text ?? ""); break;
+    case "assistant_message": kind = "agent"; body = h("span", { class: "say agent" }, r.text ?? ""); break;
+    case "llm_thought": kind = "thought"; body = fold(key, `${(r.text || "").length} chars`, h("div", { class: "say thought" }, r.text ?? "")); break;
+    case "tool_call":
+      kind = "tool";
+      body = h("div", { class: r.error ? "err" : "" }, `${r.name}(${JSON.stringify(r.arguments ?? {})}) -> ${JSON.stringify(r.error ?? r.result)}`);
+      break;
+    case "game_event":
+      kind = "game";
+      body = [h("span", { class: "badge" }, r.reaction || "?"), " ", game(r.data), fold(key, "snapshot", json(r.data))];
+      break;
+    case "client_input":
+      kind = r.input || "input";
+      body = r.input === "held" || r.input === "pointing" ? [hands(r.data), fold(key, "data", json(r.data))] : json(r.data);
+      break;
+    case "client_metric": kind = "metric"; body = [r.data?.name ?? "", fold(key, "data", json(r.data))]; break;
+    case "client_ready":
+    case "client_disconnected":
+      return connectionRow(r, t0);
+    case "input_record": kind = "LLM call"; body = inputRecord(r, key, st); break;
+    case "_llm": kind = "LLM call"; body = [h("span", { class: "dim" }, "no input record"), ...callDetails(r.call, key)]; break;
+    default: {
+      const { event, ts, iso, turn, ...rest } = r;
+      body = json(rest);
+    }
+  }
+  const offset = t0 !== null ? `+${(r.ts - t0).toFixed(1)}s` : clock(r.ts);
+  return h("div", { class: "ev" }, h("div", { class: "t", title: r.iso || clock(r.ts) }, offset), h("div", { class: "k" }, kind), h("div", { class: "body" }, body));
+}
+
+/** Renders a client connecting or leaving as a row across the turn, marking every connection after the first. */
+function connectionRow(r, t0) {
+  const offset = t0 !== null ? `+${(r.ts - t0).toFixed(1)}s` : clock(r.ts);
+  const conn = r._conn;
+  let text;
+  if (r.event === "client_disconnected") text = `Client ${r.client ?? "?"} left${conn ? ` (connection ${conn.n})` : ""}`;
+  else if (!conn || conn.n === 1) text = `Client connected, RTVI ${r.rtvi_version ?? "?"}`;
+  else text = `Client connected again: connection ${conn.n}${conn.away ? `, ${conn.away.exact ? "" : "about "}${minutes(conn.away.s)} after ${conn.away.exact ? "it left" : "the last event"}` : ""}`;
+  const first = r.event === "client_ready" && (!conn || conn.n === 1);
+  return h("div", { class: `ev conn${first ? " first" : ""}` }, h("div", { class: "t", title: r.iso || clock(r.ts) }, offset), h("div", {}, text));
+}
+
+/** Formats seconds as minutes and seconds, such as 5:02. */
+function minutes(value) {
+  if (typeof value !== "number" || !isFinite(value)) return "-";
+  const whole = Math.max(0, Math.round(value));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** Renders the stage-by-stage latency of a turn as a timeline, each stage at its start and length. */
+function breakdown(b) {
+  const stages = (b.contributions && b.contributions.length ? b.contributions : (b.ttfb || []).map((x) => ({ label: `${x.processor} TTFB`, ...x })))
+    .filter((x) => typeof x.start_time === "number" && typeof x.duration_secs === "number");
+  if (!stages.length) return null;
+  const from = Math.min(...stages.map((x) => x.start_time), b.user_turn_start_time ?? Infinity);
+  const to = Math.max(...stages.map((x) => x.start_time + x.duration_secs));
+  const span = Math.max(to - from, 0.001);
+  const grid = h("div", { class: "gantt" });
+  for (const x of stages) {
+    const left = ((x.start_time - from) / span) * 100;
+    const width = (x.duration_secs / span) * 100;
+    grid.append(
+      h("div", { class: "l", title: x.owner || "" }, x.label || x.key || "?"),
+      h("div", { class: "track" }, h("div", { class: `seg ${x.owner_kind === "setting" ? "setting" : ""}`, style: `left:${left}%;width:${width}%`, title: `${x.owner || ""} ${secs(x.duration_secs, 3)}` })),
+      h("div", { class: "s" }, secs(x.duration_secs)));
+  }
+  return h("div", { class: "lat" }, h("div", { class: "title" }, `latency ${secs(b.total_secs)}, measured from ${b.measured_from ?? "?"}`), grid);
+}
+
+// The kinds of row a turn can show, each with its label in the Rows filter.
+const KINDS = [["participant", "participant"], ["agent", "agent"], ["thought", "thoughts"], ["llm", "LLM calls"], ["tool", "tool calls"], ["game", "game events"], ["input", "client inputs"], ["metric", "client metrics"], ["connection", "connections"], ["other", "other"]];
+
+/** Returns the kind of row a turn event is shown as, for the Rows filter. */
+function kindOf(r) {
+  switch (r.event) {
+    case "user_transcript": return "participant";
+    case "assistant_message": return "agent";
+    case "llm_thought": return "thought";
+    case "input_record": case "_llm": return "llm";
+    case "tool_call": return "tool";
+    case "game_event": return "game";
+    case "client_input": return "input";
+    case "client_metric": return "metric";
+    case "client_ready": case "client_disconnected": return "connection";
+    default: return "other";
+  }
+}
+
+/** Returns the row kinds ticked in the Rows filter. */
+function rowKinds() {
+  return new Set(KINDS.map(([kind]) => kind).filter((kind) => $(`kind-${kind}`).checked));
+}
+
+/** Renders one turn as a card: its header with measures, its events of the ticked kinds in order, and its latency breakdown. */
+function card(t, st, kinds) {
+  const t0 = t.started ? t.started.ts : t.events.length ? t.events[0].ts : null;
+  const ended = t.ended;
+  const head = h("div", { class: "head" },
+    h("h2", {}, t.n === 0 ? "Before the first turn" : `Turn ${t.n}`),
+    t0 !== null ? h("span", { class: "num" }, clock(t0)) : null,
+    ended ? h("span", { class: ended.duration_s < 0 ? "badge warn" : "num", title: ended.duration_s < 0 ? "the study log gives this turn a negative duration" : null }, secs(ended.duration_s, 1)) : t.n > 0 && !st.end ? h("span", { class: "badge live" }, "running") : null,
+    ended?.interrupted ? h("span", { class: "badge bad" }, "interrupted") : null,
+    t.reconnect ? h("span", { class: "badge warn", title: "the client reconnected during this turn, so its duration includes the time away" }, "reconnect") : null,
+    t.latency !== null ? h("span", { class: `badge ${t.latency > SLOW_S ? "warn" : ""}`, title: "response latency" }, `response ${secs(t.latency)}`) : null,
+    t.firstSpeech !== null ? h("span", { class: "badge", title: "first speech latency" }, `first speech ${secs(t.firstSpeech)}`) : null,
+    t.interruption !== null ? h("span", { class: "badge", title: "interruption latency" }, `stop ${secs(t.interruption)}`) : null,
+    t.tools ? h("span", { class: "badge" }, `${t.tools} tool call${t.tools > 1 ? "s" : ""}`) : null,
+    ended && (ended.prompt_tokens || ended.completion_tokens) ? h("span", { class: "num" }, `${ended.prompt_tokens ?? 0} + ${ended.completion_tokens ?? 0} tokens`) : null);
+  const rows = t.events.flatMap((r, i) => (kinds.has(kindOf(r)) ? [row(r, t0, `t${t.n}:${r.event}:${r.ts}:${i}`, st)] : []));
+  return h("section", { class: "turn", id: `turn-${t.n}` }, head, rows.length ? h("div", { class: "events" }, rows) : null, t.breakdown ? breakdown(t.breakdown) : null);
+}
+
+/** Reads a number field of the filters, or null when it is empty. */
+function bound(id) {
+  const value = $(id).value.trim();
+  return value === "" || !isFinite(Number(value)) ? null : Number(value);
+}
+
+/** Tells whether a turn passes the turn filters in the left panel. */
+function shown(t) {
+  if ($("onlyInterrupted").checked && !t.ended?.interrupted) return false;
+  if ($("onlyTools").checked && !t.tools && !t.events.some((r) => r._call?.calls?.length || r.call?.calls?.length)) return false;
+  if ($("onlySlow").checked && !(t.latency !== null && t.latency > (bound("slowS") ?? SLOW_S))) return false;
+  const from = bound("fromTurn");
+  const to = bound("toTurn");
+  if ((from !== null && t.n < from) || (to !== null && t.n > to)) return false;
+  const query = $("search").value.trim().toLowerCase();
+  if (query) {
+    const text = t.events.map((r) => [r.text, r.name, r.input, r.event === "input_record" ? (r.inputs || []).map(inputText).join(" ") : "", (r._call || r.call)?.output?.text].join(" ")).join(" ").toLowerCase();
+    if (!text.includes(query)) return false;
+  }
+  return true;
+}
+
+/** Returns the value at a quantile of a list of numbers, interpolating between the two nearest values, or null for an empty list. */
+function quantile(values, q) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const position = (sorted.length - 1) * q;
+  const below = Math.floor(position);
+  const above = Math.min(below + 1, sorted.length - 1);
+  return sorted[below] + (sorted[above] - sorted[below]) * (position - below);
+}
+
+/** Tells whether a session still runs: no session_end yet and its log changed recently. */
+function isLive(st) {
+  const entry = listed.find((x) => x.session === st.session);
+  return !st.end && !!entry && Date.now() / 1000 - entry.modified < LIVE_S;
+}
+
+/** Lists the session's settings in the left panel, one per line. */
+function settings() {
+  const st = s.start || {};
+  const line = (label, ...value) => [h("div", { class: "l" }, label), h("div", {}, ...value)];
+  const model = (name, id) => [name ?? "?", id ? h("div", { class: "dim" }, id) : null];
+  $("meta").replaceChildren(
+    ...line("status", isLive(s) ? h("span", { class: "badge live" }, "live") : s.end ? h("span", { class: "badge" }, "ended") : h("span", { class: "badge warn" }, "no session_end")),
+    ...line("participant", st.participant ?? "?"),
+    ...line("scenario", st.scenario ?? "?"),
+    ...line("language", st.language ?? "?"),
+    ...line("STT", ...model(st.stt, st.stt_model)),
+    ...line("LLM", ...model(st.llm, st.llm_model)),
+    ...line("TTS", ...model(st.tts, st.tts_model)),
+    ...line("vision", st.vision ? "on" : "off"),
+    ...line("commit", st.commit ?? "?"));
+  document.documentElement.style.setProperty("--head", `${document.querySelector("header").offsetHeight}px`);
+}
+
+/** Returns one labelled value row of a statistics box; `sub` indents it under the row before. */
+function kv(label, value, sub = false, title = null) {
+  return [h("div", { class: sub ? "sub" : "", title }, label), h("div", { class: "v" }, value)];
+}
+
+/** Returns rows of horizontal bars, each scaled to the largest value, with its label and shown value. */
+function hbars(entries) {
+  const max = Math.max(...entries.map((e) => e.value), 0) || 1;
+  return h("div", { class: "hbars" }, entries.flatMap((e) => [
+    h("div", { class: "l", title: e.label }, e.label),
+    h("div", { class: "track" }, h("div", { class: "fill", style: `width:${(e.value / max) * 100}%` })),
+    h("div", { class: "s" }, e.shown ?? String(e.value)),
+  ]));
+}
+
+/** Counts the values of a list into [value, count] pairs, most frequent first. */
+function counts(values) {
+  const map = new Map();
+  for (const v of values) map.set(v, (map.get(v) || 0) + 1);
+  return [...map.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+const words = (text) => (typeof text === "string" ? text.trim().split(/\s+/).filter(Boolean).length : 0);
+const pct = (part, whole) => (whole ? `${Math.round((part / whole) * 100)}%` : "-");
+
+/** Computes a session's statistics from its state: session and connections, turns and words, latency, LLM calls, inputs and client events. */
+function summarize(st) {
+  const conns = connections(st);
+  const turns = model(st);
+  const study = st.study;
+  const real = turns.filter((t) => t.n > 0);
+  const last = isLive(st) ? Date.now() / 1000 : study[study.length - 1]?.ts;
+  const duration = st.end ? st.end.duration_s : st.start && last ? last - st.start.ts : null;
+  let away = conns.reduce((total, c) => total + (c.away ? c.away.s : 0), 0);
+  const latest = conns[conns.length - 1];
+  if (latest?.left && last) away += last - latest.left.ts;
+  const ended = real.filter((t) => t.ended);
+  const userLines = study.filter((r) => r.event === "user_transcript");
+  const agentLines = study.filter((r) => r.event === "assistant_message");
+  const timed = real.filter((t) => t.latency !== null);
+  const stages = new Map();
+  for (const t of real) for (const c of t.breakdown?.measured_from === "user_silence" ? t.breakdown.contributions || [] : []) {
+    if (typeof c.duration_secs !== "number") continue;
+    const label = c.label || c.key || "?";
+    if (!stages.has(label)) stages.set(label, []);
+    stages.get(label).push(c.duration_secs);
+  }
+  const sent = [...st.records.values()].filter((e) => e.sent);
+  const tokens = (field) => (st.end ? st.end[field] ?? 0 : ended.reduce((n, t) => n + (t.ended[field] || 0), 0));
+  const kinds = new Map();
+  const kind = (name) => { if (!kinds.has(name)) kinds.set(name, { got: 0, dropped: 0 }); return kinds.get(name); };
+  for (const e of sent) {
+    for (const name of new Set((e.sent.inputs || []).map((i) => i.input))) kind(name).got++;
+    for (const name of new Set((e.sent.dropped || []).map((d) => (typeof d === "string" ? d : d.input)))) kind(name).dropped++;
+  }
+  return {
+    session: st.session,
+    start: st.start || {},
+    began: st.start?.ts ?? study[0]?.ts ?? null,
+    ended: !!st.end,
+    duration,
+    active: duration !== null ? duration - away : null,
+    activeEstimated: conns.some((c) => c.away && !c.away.exact),
+    conns,
+    all: turns,
+    timed,
+    turns: real.length,
+    endedTurns: ended.length,
+    interrupted: ended.filter((t) => t.ended.interrupted).length,
+    lengths: ended.filter((t) => !t.reconnect && t.ended.duration_s >= 0).map((t) => t.ended.duration_s),
+    userWords: userLines.reduce((n, r) => n + words(r.text), 0),
+    utterances: userLines.length,
+    agentWords: agentLines.map((r) => words(r.text)),
+    latencies: timed.map((t) => t.latency),
+    firstSpeech: real.find((t) => t.firstSpeech !== null)?.firstSpeech ?? null,
+    stages,
+    calls: sent.length,
+    outcomes: counts(sent.map((e) => e.outcome?.state ?? "open")),
+    triggers: counts(sent.map((e) => e.sent.trigger ?? "?")),
+    where: counts(sent.map((e) => e.sent.llm ?? "?")),
+    tokensIn: tokens("prompt_tokens"),
+    tokensOut: tokens("completion_tokens"),
+    tools: counts(study.filter((r) => r.event === "tool_call").map((r) => r.name ?? "?")),
+    kinds,
+    reactions: counts(study.filter((r) => r.event === "game_event").map((r) => r.reaction ?? "?")),
+    clientInputs: counts(study.filter((r) => r.event === "client_input").map((r) => r.input ?? "?")),
+    metrics: study.filter((r) => r.event === "client_metric").length,
+    thoughts: study.filter((r) => r.event === "llm_thought").length,
+  };
+}
+
+/** Renders the statistics panel of the open session from its summary. */
+function side(x) {
+  const session = h("div", { class: "kv" },
+    kv("duration", minutes(x.duration)),
+    kv("active", `${x.activeEstimated ? "~" : ""}${minutes(x.active)}`, false, "duration without the time the client was away; ~ where that time is estimated from the last line before a reconnect"),
+    kv("connections", x.conns.length));
+  const connList = x.conns.length > 1 || x.conns.some((c) => c.left) ? h("div", { class: "conns" }, x.conns.map((c) => h("div", {},
+    `#${c.n} ${clock(c.ready.ts)}`,
+    c.away ? h("span", { class: "dim" }, ` after ${c.away.exact ? "" : "~"}${minutes(c.away.s)} away`) : null,
+    c.left ? h("span", { class: "dim" }, `, left ${clock(c.left.ts)}`) : null))) : null;
+
+  const turnBox = h("div", { class: "kv" },
+    kv("turns", x.turns),
+    kv("interrupted", `${x.interrupted} (${pct(x.interrupted, x.endedTurns)})`),
+    kv("median length", secs(quantile(x.lengths, 0.5), 1), false, "turns spanning a reconnect and negative durations left out"),
+    kv("participant", `${x.userWords} words`),
+    kv("utterances", x.utterances, true),
+    kv("agent", `${x.agentWords.reduce((n, w) => n + w, 0)} words`),
+    kv("messages", x.agentWords.length, true),
+    kv("median words each", quantile(x.agentWords, 0.5) ?? "-", true));
+
+  const top = Math.max(...x.latencies, SLOW_S);
+  const spark = x.timed.length ? h("div", { class: "spark", title: "response latency per turn; click a bar to go to its turn" }, x.timed.map((t) => h("div", {
+    class: t.latency > SLOW_S ? "slow" : "",
+    style: `height:${(t.latency / top) * 100}%`,
+    title: `turn ${t.n}: ${secs(t.latency)}`,
+    onclick: () => document.getElementById(`turn-${t.n}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+  }))) : null;
+  const latencyBox = [
+    h("div", { class: "kv" },
+      kv("response median", secs(quantile(x.latencies, 0.5))),
+      kv("p90", secs(quantile(x.latencies, 0.9)), true),
+      kv("max", secs(x.latencies.length ? Math.max(...x.latencies) : null), true),
+      kv("first speech", secs(x.firstSpeech))),
+    spark,
+    x.stages.size ? h("div", { class: "caption" }, "median per stage, from the participant's silence") : null,
+    x.stages.size ? hbars([...x.stages].map(([label, list]) => ({ label, value: quantile(list, 0.5), shown: secs(quantile(list, 0.5)) }))) : null,
+  ];
+
+  const llmBox = [
+    h("div", { class: "kv" },
+      kv("calls", x.calls),
+      ...x.outcomes.flatMap(([state, n]) => kv(state, n, true)),
+      kv("tokens in", x.tokensIn),
+      kv("per call", x.calls ? `~${Math.round(x.tokensIn / x.calls)}` : "-", true, "prompt tokens of the session divided by its LLM calls, an approximation"),
+      kv("tokens out", x.tokensOut),
+      ...(x.tools.length ? [kv("tool calls", x.tools.reduce((n, [, c]) => n + c, 0)), ...x.tools.flatMap(([name, n]) => kv(name, n, true))] : [])),
+    x.calls ? h("div", { class: "caption" }, "trigger") : null,
+    x.calls ? hbars(x.triggers.map(([label, n]) => ({ label, value: n }))) : null,
+    x.calls ? h("div", { class: "caption" }, "LLM") : null,
+    x.calls ? hbars(x.where.map(([label, n]) => ({ label, value: n }))) : null,
+  ];
+
+  const inputBox = x.kinds.size ? [
+    h("div", { class: "caption", style: "margin-top:0" }, "share of LLM calls that got each input"),
+    hbars([...x.kinds].sort((a, b) => b[1].got - a[1].got).map(([label, k]) => ({ label, value: k.got, shown: `${pct(k.got, x.calls)}${k.dropped ? `, ${k.dropped} dropped` : ""}` }))),
+  ] : h("div", { class: "caption", style: "margin-top:0" }, "No input records in this log.");
+
+  const clientBox = h("div", { class: "kv" },
+    kv("game events", x.reactions.reduce((n, [, c]) => n + c, 0)),
+    ...x.reactions.flatMap(([reaction, n]) => kv(reaction, n, true)),
+    ...x.clientInputs.flatMap(([input, n]) => kv(`${input} changes`, n)),
+    kv("metrics", x.metrics),
+    kv("thoughts", x.thoughts));
+
+  const box = (title, ...content) => h("section", { class: "box" }, h("h3", {}, title), ...content);
+  $("sideBody").replaceChildren(
+    box("Session", session, connList),
+    box("Turns", turnBox),
+    box("Latency", ...latencyBox),
+    box("LLM calls", ...llmBox),
+    box("Inputs", inputBox),
+    box("Client", clientBox));
+}
+
+/** Re-renders the page from the state, keeping the scroll at the bottom when it already was there. */
+function render() {
+  frame = 0;
+  if (!s) return;
+  const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
+  const summary = summarize(s);
+  const turns = summary.all;
+  settings();
+  side(summary);
+  const visible = turns.filter(shown);
+  const kinds = rowKinds();
+  const main = $("main");
+  if (!s.study.length) main.replaceChildren(h("div", { class: "empty" }, "Waiting for the study log..."));
+  else if (!visible.length) main.replaceChildren(h("div", { class: "empty" }, "No turn matches the filters."));
+  else main.replaceChildren(...visible.map((t) => card(t, s, kinds)), ...(s.end ? [h("div", { class: "notice" }, `Session ended after ${s.end.turns} turns.`)] : []));
+  if (atBottom) window.scrollTo(0, document.body.scrollHeight);
+}
+
+/** Schedules one render shortly, however many batches arrive before it; a timer rather than an animation frame, so a hidden page still renders. */
+function schedule() {
+  if (!frame) frame = setTimeout(render, 50);
+}
+
+/** Opens the stream of a session, replacing any stream open before. */
+function show(session) {
+  if (source) source.close();
+  s = fresh(session);
+  history.replaceState(null, "", `#${encodeURIComponent(session)}`);
+  $("picker").value = session;
+  steps();
+  $("main").replaceChildren(h("div", { class: "empty" }, "Connecting..."));
+  const dot = $("dot");
+  source = new EventSource(`/events?session=${encodeURIComponent(session)}`);
+  // Each connect empties the state and receives the whole log again.
+  source.onopen = () => { s = fresh(session); dot.className = "dot on"; dot.title = "Connected"; schedule(); };
+  source.onerror = () => {
+    const closed = source.readyState === EventSource.CLOSED;
+    dot.className = closed ? "dot" : "dot wait";
+    dot.title = closed ? "Not connected" : "Reconnecting";
+    if (closed) $("main").replaceChildren(h("div", { class: "empty" }, `Could not open ${session}.`));
+  };
+  source.onmessage = (event) => { take(s, JSON.parse(event.data)); schedule(); };
+}
+
+/** Fills the session picker, labelling each session with its scenario, LLM and day. */
+function fillPicker() {
+  const picker = $("picker");
+  const current = s?.session;
+  picker.replaceChildren(...listed.map((x) => {
+    const st = x.start || {};
+    const day = new Date(x.modified * 1000).toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+    return h("option", { value: x.session }, `${x.session} | ${st.scenario ?? "?"} | ${st.llm ?? "?"} | ${day}`);
+  }));
+  if (current) picker.value = current;
+  steps();
+}
+
+/** Enables the older and newer buttons only where the list has a session in that direction. */
+function steps() {
+  const index = listed.findIndex((x) => x.session === s?.session);
+  $("older").disabled = index < 0 || index >= listed.length - 1;
+  $("newer").disabled = index <= 0;
+}
+
+/** Opens the session next to the current one in the list, `by` 1 for older and -1 for newer, following only when that lands on the newest. */
+function step(by) {
+  const index = listed.findIndex((x) => x.session === s?.session);
+  const target = listed[index + by];
+  if (index < 0 || !target) return;
+  $("follow").checked = index + by === 0;
+  show(target.session);
+}
+
+/** Fetches the session list, and moves to the newest session when following and a newer one has started. */
+async function refresh() {
+  try {
+    listed = await (await fetch("/sessions")).json();
+  } catch {
+    return;
+  }
+  const signature = JSON.stringify(listed.map((x) => [x.session, x.start?.scenario, x.start?.llm]));
+  if (signature !== pickerSignature) { pickerSignature = signature; fillPicker(); }
+  if (!listed.length) {
+    if (!s) $("main").replaceChildren(h("div", { class: "empty" }, "No study logs yet. Start a session and it shows up here."));
+    return;
+  }
+  const wanted = decodeURIComponent(location.hash.slice(1));
+  if (!s) show(!$("follow").checked && listed.some((x) => x.session === wanted) ? wanted : listed[0].session);
+  else if ($("follow").checked && listed[0].session !== s.session) show(listed[0].session);
+  else if (s.study.length) { side(summarize(s)); settings(); }
+}
+
+// The overview loads at most this many study logs at once.
+const OVERVIEW_FETCHES = 6;
+const OVERVIEW = location.pathname === "/overview";
+const summaries = new Map();
+const view = { sort: "began", descending: true, group: "llm", query: "", withTurns: true };
+
+/** The columns of the overview's session table: how to read each from a summary, how to show it, and whether it is text. */
+const COLUMNS = [
+  { key: "session", label: "session", text: true, get: (x) => x.session },
+  { key: "began", label: "started", left: true, get: (x) => x.began, show: (v) => (v ? new Date(v * 1000).toLocaleString([], { year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "-") },
+  { key: "scenario", label: "scenario", text: true, get: (x) => x.start.scenario ?? "" },
+  { key: "language", label: "lang", text: true, get: (x) => x.start.language ?? "" },
+  { key: "stt", label: "STT", text: true, get: (x) => x.start.stt ?? "" },
+  { key: "llm", label: "LLM", text: true, get: (x) => x.start.llm ?? "" },
+  { key: "tts", label: "TTS", text: true, get: (x) => x.start.tts ?? "" },
+  { key: "commit", label: "commit", text: true, get: (x) => x.start.commit ?? "" },
+  { key: "duration", label: "duration", get: (x) => x.duration, show: minutes },
+  { key: "active", label: "active", get: (x) => x.active, show: (v, x) => `${x.activeEstimated ? "~" : ""}${minutes(v)}` },
+  { key: "conns", label: "conn.", title: "connections", get: (x) => x.conns.length },
+  { key: "turns", label: "turns", get: (x) => x.turns },
+  { key: "interrupted", label: "interr.", title: "share of ended turns that were interrupted", get: (x) => (x.endedTurns ? x.interrupted / x.endedTurns : null), show: (v) => (v === null ? "-" : `${Math.round(v * 100)}%`) },
+  { key: "median", label: "resp. median", title: "median response latency", get: (x) => quantile(x.latencies, 0.5), show: (v) => secs(v), slow: true },
+  { key: "p90", label: "p90", get: (x) => quantile(x.latencies, 0.9), show: (v) => secs(v), slow: true },
+  { key: "first", label: "first speech", get: (x) => x.firstSpeech, show: (v) => secs(v) },
+  { key: "inference", label: "LLM inference", title: "median LLM inference stage", get: (x) => quantile(x.stages.get("LLM inference") || [], 0.5), show: (v) => secs(v) },
+  { key: "calls", label: "LLM calls", get: (x) => x.calls },
+  { key: "perCall", label: "tokens/call", title: "prompt tokens of the session divided by its LLM calls", get: (x) => (x.calls ? x.tokensIn / x.calls : null), show: (v) => (v === null ? "-" : `~${Math.round(v)}`) },
+  { key: "words", label: "words/msg", title: "median words per agent message", get: (x) => quantile(x.agentWords, 0.5) },
+];
+
+/** The settings sessions can be grouped by for comparison, each read from session_start. */
+const GROUPS = { none: null, llm: "LLM", stt: "STT", tts: "TTS", scenario: "scenario", language: "language", commit: "commit" };
+
+/** Loads the study log of every session not summarised yet or changed since, a few at a time, and summarises each. */
+async function loadSummaries() {
+  const todo = listed.filter((x) => summaries.get(x.session)?.modified !== x.modified);
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const entry = todo[next++];
+      try {
+        const study = await (await fetch(`/study?session=${encodeURIComponent(entry.session)}`)).json();
+        const st = fresh(entry.session);
+        take(st, { study, debug: [] });
+        summaries.set(entry.session, { modified: entry.modified, summary: summarize(st) });
+      } catch {
+        summaries.set(entry.session, { modified: entry.modified, summary: null });
+      }
+      overview();
+    }
+  };
+  await Promise.all(Array.from({ length: OVERVIEW_FETCHES }, worker));
+  if (!todo.length && !$("ovBody")) overview();
+}
+
+/** Formats a table cell from a column and a summary. */
+function cell(column, x) {
+  const value = column.get(x);
+  const shown = column.show ? column.show(value, x) : value === null || value === undefined || value === "" ? "-" : String(value);
+  const classes = [column.text || column.left ? "text" : "", column.slow && typeof value === "number" && value > SLOW_S ? "slow" : ""].join(" ").trim();
+  return h("td", { class: classes || null }, shown);
+}
+
+/** Compares two summaries by a column, numbers and text alike, with missing values last. */
+function compare(column, a, b) {
+  const x = column.get(a);
+  const y = column.get(b);
+  const none = (v) => v === null || v === undefined || v === "";
+  if (none(x) || none(y)) return none(x) - none(y);
+  const order = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
+  return view.descending ? -order : order;
+}
+
+/** Sums up a group of sessions: latencies and words pooled over all their turns, counts added up. */
+function pooled(group) {
+  const all = (field) => group.flatMap((x) => x[field]);
+  const stage = (name) => group.flatMap((x) => x.stages.get(name) || []);
+  const ended = group.reduce((n, x) => n + x.endedTurns, 0);
+  const calls = group.reduce((n, x) => n + x.calls, 0);
+  const latencies = all("latencies");
+  return [
+    group.length,
+    group.reduce((n, x) => n + x.turns, 0),
+    ended ? `${Math.round((group.reduce((n, x) => n + x.interrupted, 0) / ended) * 100)}%` : "-",
+    secs(quantile(latencies, 0.5)),
+    secs(quantile(latencies, 0.9)),
+    secs(quantile(group.map((x) => x.firstSpeech).filter((v) => v !== null), 0.5)),
+    secs(quantile(stage("transcription"), 0.5)),
+    secs(quantile(stage("LLM inference"), 0.5)),
+    secs(quantile(stage("speech synthesis"), 0.5)),
+    calls ? `~${Math.round(group.reduce((n, x) => n + x.tokensIn, 0) / calls)}` : "-",
+    quantile(all("agentWords"), 0.5) ?? "-",
+  ];
+}
+
+/** Renders the overview: filters, response latency per session over time, a comparison by the chosen setting, and every session as a sortable row. */
+function overview() {
+  if (!OVERVIEW) return;
+  const loaded = listed.map((x) => summaries.get(x.session)?.summary).filter(Boolean);
+  const query = view.query.trim().toLowerCase();
+  const rows = loaded.filter((x) => (!view.withTurns || x.turns > 0) && (!query || COLUMNS.filter((c) => c.text).some((c) => String(c.get(x) ?? "").toLowerCase().includes(query))));
+  const sortColumn = COLUMNS.find((c) => c.key === view.sort) || COLUMNS[1];
+  rows.sort((a, b) => compare(sortColumn, a, b));
+
+  if (!$("ovBody")) {
+    const search = h("input", { type: "search", placeholder: "Filter by session, scenario, model or commit", value: view.query, style: "min-width:260px" });
+    search.addEventListener("input", () => { view.query = search.value; overview(); });
+    const withTurns = h("input", { type: "checkbox", checked: view.withTurns });
+    withTurns.addEventListener("change", () => { view.withTurns = withTurns.checked; overview(); });
+    const group = h("select", {}, Object.entries(GROUPS).map(([key, label]) => h("option", { value: key, selected: key === view.group }, label ? `compare by ${label}` : "no comparison")));
+    group.addEventListener("change", () => { view.group = group.value; overview(); });
+    $("main").replaceChildren(
+      h("div", { class: "controls" }, search, h("label", {}, withTurns, " only sessions with turns"), group, h("span", { class: "dim", id: "ovProgress" })),
+      h("div", { id: "ovBody" }));
+  }
+  const handled = listed.filter((x) => summaries.get(x.session)?.modified === x.modified).length;
+  $("ovProgress").textContent = handled < listed.length ? `loading ${handled} of ${listed.length} sessions...` : `${rows.length} of ${listed.length} sessions`;
+
+  const timeline = [...rows].filter((x) => x.latencies.length).sort((a, b) => (a.began ?? 0) - (b.began ?? 0));
+  const top = Math.max(SLOW_S, ...timeline.map((x) => quantile(x.latencies, 0.5)));
+  const chart = h("section", { class: "panel" },
+    h("h2", {}, "Median response latency per session, oldest first"),
+    timeline.length ? h("div", { class: "timeline" }, timeline.map((x) => {
+      const median = quantile(x.latencies, 0.5);
+      return h("div", { class: median > SLOW_S ? "slow" : "", style: `height:${(median / top) * 100}%`, title: `${x.session} | ${x.start.llm ?? "?"} | ${secs(median)} over ${x.latencies.length} turns`, onclick: () => openSession(x.session) });
+    })) : h("div", { class: "dim" }, "No session with measured latency."),
+    h("div", { class: "legend" }, `bar height up to ${secs(top)}; above ${SLOW_S} s in amber; click a bar to open the session`));
+
+  let comparison = null;
+  if (GROUPS[view.group]) {
+    const key = COLUMNS.find((c) => c.key === view.group);
+    const groups = new Map();
+    for (const x of rows) {
+      const name = key.get(x) || "?";
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(x);
+    }
+    const heads = [GROUPS[view.group], "sessions", "turns", "interr.", "resp. median", "p90", "first speech", "transcription", "LLM inference", "speech synthesis", "tokens/call", "words/msg"];
+    comparison = h("section", { class: "panel" },
+      h("h2", {}, `Compared by ${GROUPS[view.group]}, latencies and words pooled over all turns`),
+      h("div", { class: "scroll" }, h("table", { class: "tbl" },
+        h("thead", {}, h("tr", {}, heads.map((label, i) => h("th", { class: i === 0 ? "text" : null }, label)))),
+        h("tbody", {}, [...groups].sort((a, b) => b[1].length - a[1].length).map(([name, list]) => h("tr", {}, h("td", { class: "text" }, name), pooled(list).map((v) => h("td", {}, v))))))));
+  }
+
+  const table = h("section", { class: "panel" },
+    h("h2", {}, "Sessions"),
+    h("div", { class: "scroll" }, h("table", { class: "tbl" },
+      h("thead", {}, h("tr", {}, COLUMNS.map((c) => h("th", {
+        class: [c.text || c.left ? "text" : "", c.key === view.sort ? "sorted" : ""].join(" ").trim() || null,
+        title: c.title ? `${c.title}; click to sort` : "click to sort",
+        onclick: () => { view.descending = view.sort === c.key ? !view.descending : !c.text; view.sort = c.key; overview(); },
+      }, c.label + (c.key === view.sort ? (view.descending ? " v" : " ^") : ""))))),
+      h("tbody", {}, rows.map((x) => h("tr", { class: "open", title: "open this session", onclick: () => openSession(x.session) }, COLUMNS.map((c) => cell(c, x))))))));
+
+  const scrolled = [...$("ovBody").querySelectorAll(".scroll")].map((el) => el.scrollLeft);
+  $("ovBody").replaceChildren(...[chart, comparison, table].filter(Boolean));
+  $("ovBody").querySelectorAll(".scroll").forEach((el, i) => { el.scrollLeft = scrolled[i] ?? 0; });
+}
+
+/** Opens a session in the turn view. */
+function openSession(session) {
+  location.href = `/#${encodeURIComponent(session)}`;
+}
+
+/** Fetches the session list for the overview and summarises what is new or changed. */
+async function refreshOverview() {
+  try {
+    listed = await (await fetch("/sessions")).json();
+  } catch {
+    return;
+  }
+  if (!listed.length) { $("main").replaceChildren(h("div", { class: "empty" }, "No study logs yet.")); return; }
+  await loadSummaries();
+}
+
+$("picker").addEventListener("change", (event) => {
+  $("follow").checked = event.target.value === listed[0]?.session;
+  show(event.target.value);
+});
+$("follow").addEventListener("change", (event) => { if (event.target.checked && listed.length) show(listed[0].session); });
+$("kinds").replaceChildren(...KINDS.map(([kind, label]) => h("label", {}, h("input", { type: "checkbox", id: `kind-${kind}`, checked: true }), ` ${label}`)));
+$("slowS").value = SLOW_S;
+$("filters").addEventListener("input", schedule);
+$("older").addEventListener("click", () => step(1));
+$("newer").addEventListener("click", () => step(-1));
+for (const toggle of document.querySelectorAll("aside > button")) toggle.addEventListener("click", () => toggle.parentElement.classList.toggle("open"));
+
+if (OVERVIEW) {
+  document.body.classList.add("ov");
+  document.title = "TrIVA Inspector: overview";
+  $("nav").textContent = "Turns";
+  $("nav").href = "/";
+  $("main").replaceChildren(h("div", { class: "empty" }, "Loading sessions..."));
+  let busy = false;
+  const tick = async () => { if (busy) return; busy = true; try { await refreshOverview(); } finally { busy = false; } };
+  tick();
+  setInterval(tick, SESSIONS_POLL_MS);
+} else {
+  if (location.hash.length > 1) $("follow").checked = false;
+  refresh();
+  setInterval(refresh, SESSIONS_POLL_MS);
+}
+</script>
+</body>
+</html>
