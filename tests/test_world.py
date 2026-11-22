@@ -1,4 +1,4 @@
-"""What the agent and the client tell each other outside of audio: each LLM thought, sent whole, and the client's inputs, logged as sent and handed to the inputs."""
+"""What the agent and the client tell each other outside of audio: each LLM thought, sent whole, the client's inputs, logged as sent and handed to the inputs, and the client leaving, logged."""
 
 import json
 
@@ -25,6 +25,23 @@ class _RTVI:
 
     def event_handler(self, name):
         """Keep each handler registered for an event, so a test can raise the event."""
+
+        def register(handler):
+            self.handlers[name] = handler
+            return handler
+
+        return register
+
+
+class _Transport:
+    """Stand-in for the transport, keeping each event handler registered on it so a test can raise the event."""
+
+    def __init__(self):
+        """Start with no handlers."""
+        self.handlers = {}
+
+    def event_handler(self, name):
+        """Keep the handler registered for an event."""
 
         def register(handler):
             self.handlers[name] = handler
@@ -83,7 +100,7 @@ async def test_a_client_input_is_logged_as_sent(tmp_path, input_type):
     study = StudyLog(path)
     worker = _Worker()
     inputs = _Inputs()
-    attach(worker, greeting=None, study=study, settings={}, game=None, inputs=inputs)
+    attach(worker, _Transport(), greeting=None, study=study, settings={}, game=None, inputs=inputs)
     hands = {"left": None, "right": {"id": "flask-3", "kind": "flask", "shape": "beaker", "substance": None}}
     await worker.rtvi.handlers["on_client_message"](worker.rtvi, ClientMessage(msg_id="1", type=input_type, data=hands))
     study.close()
@@ -91,3 +108,15 @@ async def test_a_client_input_is_logged_as_sent(tmp_path, input_type):
     logged = [line for line in lines if line["event"] == "client_input"]
     assert [(line["input"], line["data"]) for line in logged] == [(input_type, hands)]
     assert inputs.received == [(input_type, hands)]
+
+
+async def test_a_client_leaving_is_logged(tmp_path):
+    """A client leaving the room lands in the study log as a client_disconnected line naming its identity."""
+    path = tmp_path / "study.jsonl"
+    study = StudyLog(path)
+    transport = _Transport()
+    attach(_Worker(), transport, greeting=None, study=study, settings={}, game=None, inputs=_Inputs())
+    await transport.handlers["on_client_disconnected"](transport, {"id": "unity"})
+    study.close()
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [line["client"] for line in lines if line["event"] == "client_disconnected"] == ["unity"]

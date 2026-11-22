@@ -128,7 +128,7 @@ async def main():
         greeting = scenario.greeting[run.language] if scenario.greeting else None
         inputs = Inputs(worker.queue_frames, worker.rtvi, study, capture, catalog.LOCATIONS[run.stt], catalog.LOCATIONS[run.llm])
         worker.add_observer(inputs)
-        world.attach(worker, greeting, study, settings, game, inputs)
+        world.attach(worker, transport, greeting, study, settings, game, inputs)
 
         runner = WorkerRunner()
         await runner.add_workers(worker)

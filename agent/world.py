@@ -8,6 +8,7 @@ from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frameworks.rtvi.models import ClientMessage
 from pipecat.processors.frameworks.rtvi.processor import RTVIProcessor
+from pipecat.transports.base_transport import BaseTransport
 
 from agent.game import Game
 from agent.inputs import Inputs
@@ -52,13 +53,14 @@ class ThoughtRelay(BaseObserver):
 
 def attach(
     worker: PipelineWorker,
+    transport: BaseTransport,
     greeting: str | None,
     study: StudyLog,
     settings: dict[str, Any],
     game: Game | None,
     inputs: Inputs,
 ):
-    """Wire the client handshake, the client's messages and the thoughts sent to it, so the agent opens only once a client is there to hear it."""
+    """Wire the client handshake, the client's messages, its leaving and the thoughts sent to it, so the agent opens only once a client is there to hear it."""
     worker.add_observer(ThoughtRelay(worker.rtvi))
 
     # The worker answers bot-ready on this event itself, so a second handler here would put two of them on the wire. Handlers run as separate tasks, so the settings and bot-ready reach the client in either order.
@@ -73,6 +75,12 @@ def attach(
             game.expect_start()
         if greeting is not None:
             await worker.queue_frame(TTSSpeakFrame(text=greeting))
+
+    @transport.event_handler("on_client_disconnected")
+    async def left(transport, client):
+        """Log that a client left the room, named by its identity, so a reconnect in the same session shows where the gap began."""
+        logger.info(f"Client {client['id']} disconnected")
+        study.write("client_disconnected", client=client["id"])
 
     @worker.rtvi.event_handler("on_client_message")
     async def message(rtvi, message: ClientMessage):
