@@ -15,6 +15,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.llm_service import LLMService
 
 # Tagged so the debug log can keep these records out of the console.
@@ -37,12 +38,12 @@ class LLMExchange(BaseObserver):
     """Logs each LLM call's input, tool calls and output to the debug log, for explaining afterwards why the agent said what it said."""
 
     def __init__(self, **kwargs):
-        """Set up the observer with no response in progress."""
-        super().__init__(observe_every_push=False, **kwargs)
+        """Set up the observer with no response in progress, observing every hop of a frame."""
+        super().__init__(observe_every_push=True, **kwargs)
         self._output: list[str] | None = None
 
     async def on_push_frame(self, data: FramePushed):
-        """Record a context as it enters an LLM, and the calls and text that come out of it."""
+        """Record a context as it enters an LLM, and the calls and text the LLM itself first pushes out, not the frames it only passes along."""
         frame = data.frame
         if isinstance(frame, LLMContextFrame) and isinstance(data.destination, LLMService):
             context = frame.context
@@ -52,7 +53,7 @@ class LLMExchange(BaseObserver):
                 tools=_tools(context),
                 speculation=frame.speculation,
             )
-        elif not isinstance(data.source, LLMService):
+        elif not data.first_push or not isinstance(data.source, LLMService):
             return
         elif isinstance(frame, LLMFullResponseStartFrame):
             self._output = []
@@ -61,6 +62,9 @@ class LLMExchange(BaseObserver):
         elif isinstance(frame, LLMFullResponseEndFrame) and self._output is not None:
             log.debug("LLM output", text="".join(self._output))
             self._output = None
+        elif data.direction != FrameDirection.DOWNSTREAM:
+            # Tool calls and results are broadcast as one copy each way; only the downstream copy is logged.
+            return
         elif isinstance(frame, FunctionCallsStartedFrame):
             for call in frame.function_calls:
                 log.debug("LLM tool call", name=call.function_name, arguments=_snapshot(call.arguments))
