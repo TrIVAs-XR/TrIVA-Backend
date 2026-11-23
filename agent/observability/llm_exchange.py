@@ -49,6 +49,7 @@ class LLMExchange(BaseObserver):
             context = frame.context
             log.debug(
                 "LLM input",
+                system_instruction=data.destination.settings.system_instruction,
                 messages=_snapshot(context.get_messages()),
                 tools=_tools(context),
                 speculation=frame.speculation,

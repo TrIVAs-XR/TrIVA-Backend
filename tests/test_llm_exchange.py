@@ -16,11 +16,12 @@ from pipecat.observers.base_observer import FramePushed
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.llm_service import LLMService
+from pipecat.services.settings import LLMSettings
 
 from agent.observability.llm_exchange import LLMExchange
 
-# The observer only checks whether a hop's end is an LLM service, so an uninitialised one stands in for the LLM.
-LLM = LLMService.__new__(LLMService)
+# The observer checks whether a hop's end is an LLM service and reads its system prompt, so a bare one with a prompt stands in for the LLM.
+LLM = LLMService(settings=LLMSettings(model="test", system_instruction="You are Iva."))
 BEFORE = object()
 AFTER = object()
 
@@ -61,12 +62,13 @@ def test_every_hop_of_a_frame_is_observed():
 
 
 async def test_a_context_passed_on_by_another_processor_is_logged_as_it_enters_the_llm(records):
-    """A context reaches the LLM on its second hop, after the context capture passed it on, and is logged there."""
+    """A context reaches the LLM on its second hop, after the context capture passed it on, and is logged there with the LLM's system prompt."""
     exchange = LLMExchange()
     frame = _context()
     await exchange.on_push_frame(_push(frame, object(), BEFORE, first_push=True))
     await exchange.on_push_frame(_push(frame, BEFORE, LLM, first_push=False))
     assert [record["message"] for record in records] == ["LLM input"]
+    assert records[0]["system_instruction"] == "You are Iva."
     assert records[0]["messages"] == [{"role": "user", "content": "hello"}]
 
 

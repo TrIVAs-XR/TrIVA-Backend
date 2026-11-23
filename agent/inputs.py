@@ -36,10 +36,10 @@ HEADERS = {
 # Where an input the client works out was processed.
 CLIENT = "client"
 
-# Where the emotion reading of expressive conversation is processed: Pipecat Tone runs on this machine's CPU.
+# Where the emotion reading of expressive conversation is processed: Pipecat Voice Reader runs on this machine's CPU.
 EMOTION_LOCATION = "local"
 
-# The head of a user message that carries an expressive-conversation reading, such as "([emotion angry=0.81]) Where is it?".
+# The head of a user message that carries an expressive-conversation reading, such as "([tone frustrated=0.71, neutral=0.22],[arousal value=0.34]) Where is it?".
 READING_START = "(["
 READING_END = ") "
 

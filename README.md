@@ -18,6 +18,8 @@ Windows, with [uv](https://docs.astral.sh/uv/) installed. uv fetches Python 3.14
    uv sync
    ```
 
+   The first session downloads the Pipecat Voice Reader model from Hugging Face, which holds that session's start.
+
 2. Copy `.env.example` to `.env` and fill in the API keys.
 
 3. Download `livekit-server.exe` from the [LiveKit releases](https://github.com/livekit/livekit/releases) into the project root. The agent starts it when nothing listens on `LIVEKIT_URL` yet.
@@ -124,7 +126,7 @@ Every model is a named entry in `agent/services/catalog.py`, and a new entry sho
 | Adding…                                 | What to change                                                                                                                                                                                                                                                                                                                      |
 |-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Another model from an existing provider | One line in the `STT`, `LLM` or `TTS` registry, such as `"ministral-8b": partial(_mistral_llm, model="ministral-8b-2512")`. Name a pinned snapshot, never a `-latest` alias.                                                                                                                                                                                                     |
-| A new provider                          | A factory beside the others that builds its Pipecat service and imports it inside the function.<br/>Add the provider's extra to `pipecat-ai[...]` in `pyproject.toml` and run `uv sync`.<br/>If it needs a key, add it to `Config` and `load()` in `agent/config.py`, to `.env.example`, and read it in the factory with `_demand`. |
+| A new provider                          | A factory beside the others that builds its Pipecat service and imports it inside the function. An LLM factory takes the scenario's system prompt as its second argument and sets it as the service's `system_instruction`.<br/>Add the provider's extra to `pipecat-ai[...]` in `pyproject.toml` and run `uv sync`.<br/>If it needs a key, add it to `Config` and `load()` in `agent/config.py`, to `.env.example`, and read it in the factory with `_demand`. |
 | A voice                                 | Also an entry in `TTS_LANGUAGES` naming the session languages it speaks.                                                                                                                                                                                                                                                            |
 
 ## Further reading

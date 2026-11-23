@@ -90,7 +90,6 @@ async def test_a_stream_that_ends_while_thinking_still_ends_the_thought_and_clos
 
 # A conversation the LLM answered with a tool call, its result now last.
 AFTER_TOOL_CALL = [
-    {"role": "system", "content": "You are Iva."},
     {"role": "user", "content": "Yes, I'm ready."},
     {"role": "assistant", "tool_calls": [{"id": "abcdefghi", "type": "function", "function": {"name": "start_task", "arguments": "{}"}}]},
     {"role": "tool", "tool_call_id": "abcdefghi", "content": '{"started": true}'},
@@ -98,9 +97,11 @@ AFTER_TOOL_CALL = [
 
 
 async def _sent(messages: list[dict]) -> list[dict]:
-    """Return the messages the service's adapter would send for a context."""
+    """Return the messages the service's adapter would send for a context, behind the system prompt a session's LLM carries."""
     adapter = ThinkingMistralLLMService.adapter_class()
-    params = await adapter.get_llm_invocation_params(LLMContext(messages=messages), convert_developer_to_user=True)
+    params = await adapter.get_llm_invocation_params(
+        LLMContext(messages=messages), system_instruction="You are Iva.", convert_developer_to_user=True
+    )
     return [dict(message) for message in params["messages"]]
 
 

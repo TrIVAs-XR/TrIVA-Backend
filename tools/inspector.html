@@ -403,7 +403,8 @@ function message(m, key) {
 function callDetails(call, key) {
   const parts = [];
   if (call.input) {
-    const messages = call.input.messages || [];
+    const instruction = call.input.system_instruction ? [{ role: "system", content: call.input.system_instruction }] : [];
+    const messages = [...instruction, ...(call.input.messages || [])];
     parts.push(fold(`${key}:ctx`, `context: ${messages.length} messages${call.input.speculation ? " (speculation)" : ""}`,
       ...messages.map((m, i) => message(m, `${key}:m${i}`))));
     const tools = call.input.tools || [];

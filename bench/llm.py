@@ -68,12 +68,10 @@ class Reply:
 class Conversation(BaseObserver):
     """One scripted session with an LLM: the context aggregators around it in a pipeline, driven a step at a time, with every frame the LLM pushes gathered into the step's reply."""
 
-    def __init__(self, llm: LLMService, system_prompt: str, greeting: str | None, tools: list):
-        """Assemble the pipeline on a context that opens with the system prompt and, when the scenario has one, its spoken greeting."""
+    def __init__(self, llm: LLMService, greeting: str | None, tools: list):
+        """Assemble the pipeline on a context that opens with the scenario's spoken greeting, when it has one; the system prompt is the LLM's own."""
         super().__init__(observe_every_push=False)
-        messages = [{"role": "system", "content": system_prompt}]
-        if greeting:
-            messages.append({"role": "assistant", "content": greeting})
+        messages = [{"role": "assistant", "content": greeting}] if greeting else []
         aggregators = LLMContextAggregatorPair(LLMContext(messages=messages, tools=tools or NOT_GIVEN))
         aggregators.assistant().add_event_handler("on_assistant_turn_stopped", self._on_turn_stopped)
         self._llm = llm
@@ -199,11 +197,11 @@ def setup_hash(case: dict[str, Any]) -> str:
 
 
 async def run_case(llm: LLMService, judge: LLMService, case: dict[str, Any]) -> dict[str, Any]:
-    """Play one case through the LLM once and return every step's reply, measurements and checks, and the checks on the whole conversation."""
-    system_prompt, greeting, tools = _setup(case)
+    """Play one case through an LLM built on the case's system prompt once and return every step's reply, measurements and checks, and the checks on the whole conversation."""
+    _, greeting, tools = _setup(case)
     for tool in tools:
         llm.register_function(tool.name, _start_task)
-    conversation = Conversation(llm, system_prompt, greeting, tools)
+    conversation = Conversation(llm, greeting, tools)
     transcript: list[tuple[str, str]] = [("agent", greeting)] if greeting else []
     steps = []
     await conversation.start()
@@ -256,14 +254,14 @@ async def _start_task(params: FunctionCallParams):
     await params.result_callback(STARTED)
 
 
-def build(name: str, cfg: config.Config, **overrides: str | None) -> LLMService:
-    """Build a catalog LLM with any of the arguments its entry binds replaced, such as an older snapshot or the reasoning effort that snapshot accepts; an override of None keeps the entry's own."""
+def build(name: str, cfg: config.Config, system_prompt: str | None, **overrides: str | None) -> LLMService:
+    """Build a catalog LLM on a system prompt, or none, with any of the arguments its entry binds replaced, such as an older snapshot or the reasoning effort that snapshot accepts; an override of None keeps the entry's own."""
     factory = catalog.LLM[name]
     overrides = {key: value for key, value in overrides.items() if value is not None}
     unbound = [key for key in overrides if not (isinstance(factory, partial) and key in factory.keywords)]
     if unbound:
         sys.exit(f"'{name}' does not bind {', '.join(unbound)}, so it cannot be replaced.")
-    return factory(cfg, **overrides)
+    return factory(cfg, system_prompt, **overrides)
 
 
 def load(names: list[str] | None) -> dict[str, dict[str, Any]]:
@@ -295,9 +293,9 @@ async def main():
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
     cfg = config.load()
-    judge = build(JUDGE, cfg, reasoning_effort=JUDGE_REASONING)
+    judge = build(JUDGE, cfg, None, reasoning_effort=JUDGE_REASONING)
     judge_hash = record.digest([record.settings(judge), checks.JUDGE_SYSTEM, checks.JUDGE_SCHEMA])
-    candidate = build(args.llm, cfg, model=args.model, reasoning_effort=args.reasoning)
+    candidate = build(args.llm, cfg, None, model=args.model, reasoning_effort=args.reasoning)
     model = candidate.settings.model
     done = record.read("llm")
 
@@ -313,7 +311,8 @@ async def main():
         }
         have = sum(1 for line in done if line["error"] is None and all(line[k] == v for k, v in key.items()))
         for rep in range(have, args.reps):
-            result = await run_case(build(args.llm, cfg, model=args.model, reasoning_effort=args.reasoning), judge, case)
+            llm = build(args.llm, cfg, _setup(case)[0], model=args.model, reasoning_effort=args.reasoning)
+            result = await run_case(llm, judge, case)
             record.append("llm", {"llm": args.llm, **key, "rep": rep, **result})
             verdicts = [item for step in result["steps"] for item in step["checks"].items()]
             verdicts += list(result["checks"].items())

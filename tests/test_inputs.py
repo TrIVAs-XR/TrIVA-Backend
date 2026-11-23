@@ -219,13 +219,14 @@ async def test_a_tool_result_triggers_the_call(inputs, worker, rtvi, capture):
 
 
 async def test_an_emotion_reading_is_its_own_input(inputs, worker, rtvi, capture):
-    """The reading expressive conversation puts at the head of a user message is recorded apart from the words."""
-    worker.messages.append({"role": "user", "content": "([emotion angry=0.81, neutral=0.12]) Where is it?"})
+    """The reading the voice reader puts at the head of a user message is recorded apart from the words."""
+    reading = "([tone frustrated=0.71, neutral=0.22],[arousal value=0.34],[laughter value=0.02],[speech_rate value=3.1],[sarcasm_voice value=0.63])"
+    worker.messages.append({"role": "user", "content": f"{reading} Where is it?"})
     await _call(inputs, worker, capture)
     (sent,) = rtvi.records("sent")
     assert sent["inputs"] == [
         {"input": "transcript", "data": "Where is it?", "where": "local"},
-        {"input": "emotion", "data": "([emotion angry=0.81, neutral=0.12])", "where": "local"},
+        {"input": "emotion", "data": reading, "where": "local"},
     ]
 
 

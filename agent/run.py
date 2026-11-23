@@ -10,6 +10,7 @@ from pipecat.transcriptions.language import Language
 from pipecat.workers.runner import WorkerRunner
 
 from agent import config, frame_saver, join, livekit_server, nemotron_server, pipeline, roster, scenarios, session, world
+from agent.camera import Camera
 from agent.config import AUDIO_IN, AUDIO_OUT
 from agent.game import START_TASK, Game
 from agent.inputs import ContextCapture, Inputs
@@ -45,8 +46,9 @@ async def main():
     log_path = debug_log.start(study_path.stem)
     study = StudyLog(study_path)
     language = Language(run.language)
+    scenario = scenarios.SCENARIOS[run.scenario]
     stt = catalog.STT[run.stt](cfg, language)
-    llm = catalog.LLM[run.llm](cfg)
+    llm = catalog.LLM[run.llm](cfg, scenario.system_prompt(run.language))
     tts = catalog.TTS[run.tts](cfg, language)
     # Written to the study log and sent to the client from this one dict, so the two cannot disagree about what the session is.
     settings = {
@@ -89,7 +91,6 @@ async def main():
         logger.info(f"Room '{cfg.room}' on {cfg.livekit_url}")
         logger.info(f"Client connection details on port {join.PORT} at {join.PATH}")
 
-        scenario = scenarios.SCENARIOS[run.scenario]
         # A scenario with a game that opens on a greeting holds the game until the agent starts the task.
         intro = scenario.reaction is not None and scenario.greeting is not None
         saver = None
@@ -97,6 +98,7 @@ async def main():
             frames_path = frame_saver.DIRECTORY / study_path.stem
             saver = frame_saver.FrameSaver(frames_path)
             logger.info(f"Saving camera frames to {frames_path}")
+        camera = Camera()
         capture = ContextCapture()
         worker = PipelineWorker(
             pipeline.build(
@@ -104,8 +106,8 @@ async def main():
                 stt,
                 llm,
                 tts,
-                scenario.system_prompt(run.language),
                 [START_TASK] if intro else [],
+                camera,
                 capture,
                 saver,
             ),
@@ -114,6 +116,8 @@ async def main():
                 audio_out_sample_rate=AUDIO_OUT,
                 enable_metrics=True,
                 enable_usage_metrics=True,
+                # Teaches the LLM to read the voice reader's readings.
+                enable_expressive_conversation=True,
             ),
             observers=[Timeline(), LLMExchange(), *study.observers],
             idle_timeout_secs=None,

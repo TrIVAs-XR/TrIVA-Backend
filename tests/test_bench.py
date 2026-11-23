@@ -104,23 +104,23 @@ def test_every_stt_case_has_its_recording_and_a_reference(name, case):
 
 def test_a_snapshot_the_catalog_does_not_list_can_be_measured():
     """Older models stay measurable after the catalog moves on, by naming their snapshot in place of the entry's own."""
-    assert llm.build("mistral-small", CONFIG, model="mistral-medium-2604").settings.model == "mistral-medium-2604"
-    assert llm.build("mistral-small", CONFIG, model=None).settings.model == "mistral-small-2603"
+    assert llm.build("mistral-small", CONFIG, None, model="mistral-medium-2604").settings.model == "mistral-medium-2604"
+    assert llm.build("mistral-small", CONFIG, None, model=None).settings.model == "mistral-small-2603"
 
 
 def test_a_snapshot_can_be_measured_at_a_reasoning_effort_it_accepts():
     """An older snapshot may refuse the entry's reasoning effort, so the benchmark can name another and keep everything else."""
-    service = llm.build("mistral-small", CONFIG, model="mistral-large-2512", reasoning_effort="low")
+    service = llm.build("mistral-small", CONFIG, None, model="mistral-large-2512", reasoning_effort="low")
 
     assert service.settings.model == "mistral-large-2512"
     assert service.settings.extra == {"reasoning_effort": "low"}
-    assert llm.build("mistral-small", CONFIG).settings.extra == {"reasoning_effort": "none"}
+    assert llm.build("mistral-small", CONFIG, None).settings.extra == {"reasoning_effort": "none"}
 
 
 def test_an_argument_the_entry_does_not_bind_is_refused():
     """Replacing something the catalog entry never set would silently measure a different setup, so it stops at once."""
     with pytest.raises(SystemExit):
-        llm.build("mistral-small", CONFIG, temperature="0.2")
+        llm.build("mistral-small", CONFIG, None, temperature="0.2")
 
 
 def test_an_entry_not_bound_to_a_model_refuses_a_replacement():
