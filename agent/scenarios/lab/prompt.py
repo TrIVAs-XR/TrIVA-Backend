@@ -62,7 +62,7 @@ Equipment, by the name the game uses and how you call it in {language}:
 {equipment}
 
 What you know
-You receive game-state updates as messages starting with "Game state update from the client." The participant does not see or say these. Each one is the full current state, and the newest one is what is true now. It has:
+You receive game-state updates as messages wrapped in <game_state> tags, sent by the game, not by the participant. The participant does not see or say these. Each one is the full current state, and the newest one is what is true now. It has:
 - event: what just happened, or null when nothing has happened in the last few seconds.
 - recipe: the compound in progress. index counts from 0 and count is the total. It has the flask, the finishing station, the two ingredients each with name, code, color and whether it has been fetched and poured, and the status of the steps.
 - detail: the flask, substance or station the event involved, if any, and null whenever event is.

@@ -27,8 +27,8 @@ from pipecat.utils.utils import obj_id
 
 from agent.observability.study_log import StudyLog
 
-# Says where the snapshot comes from, since Mistral receives it as a user message.
-HEADER = "Game state update from the client. The participant did not say this."
+# The tag a game snapshot is wrapped in within the context.
+TAG = "game_state"
 
 # How long the agent has to stay idle before a held reaction runs, so a user turn about to run the LLM gets there first.
 GRACE_S = 0.3
@@ -49,6 +49,11 @@ START_TASK = FunctionSchema(
 
 # What start_task returns, last in the context the LLM's next run reads.
 STARTED = {"started": True, "next": "Introduce the task as your instructions describe before giving the first step."}
+
+
+def wrap(tag: str, data: Any) -> str:
+    """Return a game snapshot or client input as the context holds it: its JSON between the opening and closing tag of its kind."""
+    return f"<{tag}>\n{json.dumps(data, ensure_ascii=False)}\n</{tag}>"
 
 
 class Reaction(Enum):
@@ -157,7 +162,7 @@ class Game(BaseObserver):
     def _swap_in(self, snapshot: dict[str, Any]) -> Callable[[list], list]:
         """Build the context transform that drops the previous snapshot and appends this one, noting when it ran."""
         previous = self._snapshot
-        message = {"role": "developer", "content": f"{HEADER}\n{json.dumps(snapshot, ensure_ascii=False)}"}
+        message = {"role": "developer", "content": wrap(TAG, snapshot)}
         self._snapshot = message
         self._entered = None
 

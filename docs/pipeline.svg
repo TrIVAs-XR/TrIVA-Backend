@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1346" height="430" viewBox="0 0 1346 430" role="img" aria-labelledby="title">
-  <title id="title">Inside the agent: audio from the Unity client runs through transport in, the camera, which holds the newest camera frame, STT, VADFallback, the voice reader, the user aggregator, LLM, the reading strip, which removes a voice reading the LLM copied into its reply, TTS, transport out and the assistant aggregator. Both aggregators write the LLM context, which the LLM reads. Client messages reach world.py, which logs metrics and hands game events to Game; Game swaps the snapshot into the context and runs or interrupts the LLM. Observers watch every frame and write the debug and study logs.</title>
+  <title id="title">Inside the agent: audio from the Unity client runs through transport in, the camera, which holds the newest camera frame, STT, VADFallback, the voice reader, the user aggregator, LLM, the reply strip, which removes a voice reading or a tagged input the LLM copied into its reply, TTS, transport out and the assistant aggregator. Both aggregators write the LLM context, which the LLM reads. Client messages reach world.py, which logs metrics and hands game events to Game; Game swaps the snapshot into the context and runs or interrupts the LLM. Observers watch every frame and write the debug and study logs.</title>
   <style>
     text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; text-anchor: middle; }
     .name { font-size: 14px; font-weight: 600; }
@@ -69,7 +69,7 @@
   <line class="link" x1="911" y1="166" x2="927" y2="166" marker-end="url(#arrow)"/>
 
   <rect class="stage" x="928" y="144" width="84" height="44" rx="6"/>
-  <text x="970" y="162" font-size="12">reading</text>
+  <text x="970" y="162" font-size="12">reply</text>
   <text x="970" y="177" font-size="12">strip</text>
   <line class="link" x1="1013" y1="166" x2="1029" y2="166" marker-end="url(#arrow)"/>
 

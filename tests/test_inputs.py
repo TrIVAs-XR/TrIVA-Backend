@@ -20,8 +20,9 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import LLMService
 from pipecat.tests.utils import run_test
 
-from agent.game import HEADER as GAME_HEADER
-from agent.inputs import HEADERS, INPUTS, ContextCapture, Inputs
+from agent.game import TAG as GAME_TAG
+from agent.game import wrap
+from agent.inputs import INPUTS, ContextCapture, Inputs
 from agent.observability.study_log import StudyLog
 
 HANDS = {"left": None, "right": {"id": "flask-3", "kind": "flask"}}
@@ -143,9 +144,9 @@ async def test_a_newer_state_replaces_the_previous_one_in_the_context(inputs, wo
     """Only the newest held state is in the context, after the other messages."""
     await inputs.receive("held", OTHER_HANDS)
     await inputs.receive("held", HANDS)
-    held = [m for m in worker.messages if m["content"].startswith(HEADERS["held"])]
+    held = [m for m in worker.messages if m["content"].startswith("<held>")]
     assert len(held) == 1
-    assert json.loads(held[0]["content"].removeprefix(HEADERS["held"] + "\n")) == HANDS
+    assert held[0]["content"] == wrap("held", HANDS)
     assert worker.messages[-1] is held[0]
 
 
@@ -201,7 +202,7 @@ async def test_a_transcript_counts_once_and_a_game_snapshot_triggers(inputs, wor
     await _call(inputs, worker, capture)
     worker.messages.append({"role": "assistant", "content": "Hi."})
     snapshot = {"event": "poured", "detail": None}
-    worker.messages.append({"role": "developer", "content": f"{GAME_HEADER}\n{json.dumps(snapshot)}"})
+    worker.messages.append({"role": "developer", "content": wrap(GAME_TAG, snapshot)})
     await inputs.note("game", snapshot)
     await _call(inputs, worker, capture)
     first, second = rtvi.records("sent")
@@ -292,7 +293,7 @@ async def test_the_next_draft_is_sent_right_after_a_call(inputs, worker, rtvi, c
 async def test_a_snapshot_swapped_in_after_the_user_message_leaves_the_user_turn_the_trigger(inputs, worker, rtvi, capture):
     """A game snapshot moving to the end of the context does not make a user turn's call a game call."""
     worker.messages.append({"role": "user", "content": "Done."})
-    worker.messages.append({"role": "developer", "content": f"{GAME_HEADER}\n{json.dumps({'event': None})}"})
+    worker.messages.append({"role": "developer", "content": wrap(GAME_TAG, {"event": None})})
     await _call(inputs, worker, capture)
     assert rtvi.records("sent")[0]["trigger"] == "user_turn"
 
@@ -300,7 +301,7 @@ async def test_a_snapshot_swapped_in_after_the_user_message_leaves_the_user_turn
 async def test_a_call_while_the_participant_speaks_keeps_the_transcript_in_the_draft(inputs, worker, rtvi, capture):
     """A game call during the participant's speech does not take the coming transcript out of the next draft."""
     await _push(inputs, UserStartedSpeakingFrame())
-    worker.messages.append({"role": "developer", "content": f"{GAME_HEADER}\n{json.dumps({'event': 'poured'})}"})
+    worker.messages.append({"role": "developer", "content": wrap(GAME_TAG, {"event": "poured"})})
     await _call(inputs, worker, capture)
     assert [e["input"] for e in rtvi.records("draft")[-1]["inputs"]] == ["transcript"]
 
@@ -325,7 +326,7 @@ async def test_the_record_holds_the_context_as_the_call_passed_not_as_it_is_late
 
     def late_swap(context):
         """Append a held state as the user aggregator would just after the call."""
-        context.get_messages().append({"role": "developer", "content": f"{HEADERS['held']}\n{json.dumps(HANDS)}"})
+        context.get_messages().append({"role": "developer", "content": wrap("held", HANDS)})
 
     await _call(inputs, worker, capture, before_observer=late_swap)
     assert [e["input"] for e in rtvi.records("sent")[0]["inputs"]] == ["transcript"]
@@ -337,7 +338,7 @@ async def test_a_call_arriving_upstream_is_captured_after_the_llm(inputs, worker
 
     def late_swap(context):
         """Append a held state just after the call."""
-        context.get_messages().append({"role": "developer", "content": f"{HEADERS['held']}\n{json.dumps(HANDS)}"})
+        context.get_messages().append({"role": "developer", "content": wrap("held", HANDS)})
 
     await _call(inputs, worker, capture, before_observer=late_swap, upstream=True)
     (sent,) = rtvi.records("sent")

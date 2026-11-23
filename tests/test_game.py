@@ -26,7 +26,7 @@ from pipecat.services.llm_service import LLMService
 from pipecat.tests.utils import run_test
 
 from agent import game as game_module
-from agent.game import HEADER, STARTED, Game, Reaction
+from agent.game import STARTED, TAG, Game, Reaction
 from agent.inputs import ContextCapture
 from agent.observability.study_log import StudyLog
 
@@ -65,9 +65,9 @@ class _Worker:
     def snapshots(self) -> list[dict]:
         """The snapshots the context holds, oldest first."""
         return [
-            json.loads(m["content"].removeprefix(HEADER))
+            json.loads(m["content"].removeprefix(f"<{TAG}>").removesuffix(f"</{TAG}>"))
             for m in self.messages
-            if m["content"].startswith(HEADER)
+            if m["content"].startswith(f"<{TAG}>")
         ]
 
 

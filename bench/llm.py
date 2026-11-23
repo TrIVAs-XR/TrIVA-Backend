@@ -32,7 +32,7 @@ from pipecat.utils.types import NOT_GIVEN
 from pipecat.workers.runner import WorkerRunner
 
 from agent import config, scenarios
-from agent.game import HEADER, START_TASK, STARTED
+from agent.game import START_TASK, STARTED, TAG, wrap
 from agent.services import catalog
 from bench import checks, record
 
@@ -115,7 +115,7 @@ class Conversation(BaseObserver):
     async def show(self, snapshot: dict[str, Any], run: bool) -> Reply | None:
         """Swap a game snapshot into the context in place of the previous one, as the game does, and, when asked, return the LLM's reply to it."""
         previous = self._snapshot
-        message = {"role": "developer", "content": f"{HEADER}\n{json.dumps(snapshot, ensure_ascii=False)}"}
+        message = {"role": "developer", "content": wrap(TAG, snapshot)}
         self._snapshot = message
         frames: list[Frame] = [
             LLMMessagesTransformFrame(transform=lambda ms: [m for m in ms if m is not previous] + [message], run_llm=False)
@@ -193,7 +193,7 @@ def _setup(case: dict[str, Any]) -> tuple[str, str | None, list]:
 def setup_hash(case: dict[str, Any]) -> str:
     """Hash everything the scenario puts in front of the LLM, so results from before a prompt change are not compared with results after it."""
     system_prompt, greeting, tools = _setup(case)
-    return record.digest([system_prompt, greeting, [tool.to_default_dict() for tool in tools], STARTED, HEADER])
+    return record.digest([system_prompt, greeting, [tool.to_default_dict() for tool in tools], STARTED, TAG])
 
 
 async def run_case(llm: LLMService, judge: LLMService, case: dict[str, Any]) -> dict[str, Any]:

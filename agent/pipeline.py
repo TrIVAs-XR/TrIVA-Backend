@@ -6,7 +6,6 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.expressive.processors.voice_reader import PipecatVoiceReader
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
@@ -23,7 +22,7 @@ from pipecat.utils.types import NOT_GIVEN
 from agent.camera import Camera
 from agent.frame_saver import FrameSaver
 from agent.inputs import ContextCapture
-from agent.reading_strip import strip_readings
+from agent.reply_strip import reply_strip
 from agent.vad_fallback import VADFallback
 
 
@@ -63,8 +62,8 @@ def build(
             context_capture.before_llm(),
             llm,
             context_capture.after_llm(),
-            # Takes a voice reading the LLM copied into its reply out of the speech, the context and the study log.
-            LLMTextProcessor(text_transforms=[("*", strip_readings)]),
+            # Takes a voice reading or a tagged input the LLM copied into its reply out of the speech, the context and the study log.
+            reply_strip(),
             tts,
             transport.output(),
             aggregators.assistant(),

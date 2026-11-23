@@ -21,17 +21,15 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi.processor import RTVIProcessor
 from pipecat.services.llm_service import LLMService
 
-from agent.game import HEADER as GAME_HEADER
+from agent.game import TAG as GAME_TAG
+from agent.game import wrap
 from agent.observability.study_log import StudyLog
 
 # The RTVI server-message type the agent sends each input record under, as {"t": "inputs", "d": {"id": ..., "state": ..., ...}}.
 INPUTS = "inputs"
 
-# Says where each client input in the context comes from, since Mistral receives it as a user message.
-HEADERS = {
-    "held": "What the participant holds in each hand, from the client. The participant did not say this.",
-    "pointing": "What the participant is pointing at with each hand, from the client. The participant did not say this.",
-}
+# The client inputs the context holds, each wrapped in a tag named after its kind, as a game snapshot is.
+CLIENT_INPUTS = ("held", "pointing")
 
 # Where an input the client works out was processed.
 CLIENT = "client"
@@ -63,9 +61,10 @@ def _text(message: Any) -> str | None:
 
 def _client_input(text: str) -> tuple[str, Any] | None:
     """The kind and data of a client input or game snapshot the context holds, or None for any other message."""
-    for kind, header in [*HEADERS.items(), ("game", GAME_HEADER)]:
-        if text.startswith(header + "\n"):
-            return kind, json.loads(text.removeprefix(header + "\n"))
+    for kind, tag in [*((kind, kind) for kind in CLIENT_INPUTS), ("game", GAME_TAG)]:
+        start, end = f"<{tag}>\n", f"\n</{tag}>"
+        if text.startswith(start) and text.endswith(end):
+            return kind, json.loads(text.removeprefix(start).removesuffix(end))
     return None
 
 
@@ -172,7 +171,7 @@ class Inputs(BaseObserver):
     def _swap_in(self, kind: str, data: Any) -> Callable[[list], list]:
         """Build the context transform that drops this kind's previous message and appends the new one."""
         previous = self._messages.get(kind)
-        message = {"role": "developer", "content": f"{HEADERS[kind]}\n{json.dumps(data, ensure_ascii=False)}"}
+        message = {"role": "developer", "content": wrap(kind, data)}
         self._messages[kind] = message
 
         def swap(messages: list) -> list:
@@ -252,7 +251,7 @@ class Inputs(BaseObserver):
     @staticmethod
     def _dropped(entry: dict, inputs: list[dict]) -> bool:
         """Whether an intended input missed the call: its kind is absent, or, for a client input swapped in here, the call got other data than intended."""
-        if entry["input"] in HEADERS:
+        if entry["input"] in CLIENT_INPUTS:
             return entry not in inputs
         return not any(sent["input"] == entry["input"] for sent in inputs)
 
