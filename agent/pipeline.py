@@ -22,6 +22,7 @@ from pipecat.utils.types import NOT_GIVEN
 from agent.camera import Camera
 from agent.frame_saver import FrameSaver
 from agent.inputs import ContextCapture
+from agent.reading_filter import ReadingFilter
 from agent.reply_strip import reply_strip
 from agent.vad_fallback import VADFallback
 
@@ -34,9 +35,10 @@ def build(
     tools: list[FunctionSchema],
     camera: Camera,
     context_capture: ContextCapture,
+    reading_filter: ReadingFilter,
     frame_saver: FrameSaver | None = None,
 ) -> Pipeline:
-    """Assemble the pipeline. The only place it is assembled. A frame saver, when given, and then the camera see the transport's input first, the VAD fallback and the voice reader sit between STT and the user aggregator, and the context capture on both sides of the LLM."""
+    """Assemble the pipeline. The only place it is assembled. A frame saver, when given, and then the camera see the transport's input first, the VAD fallback, the voice reader and the reading filter sit between STT and the user aggregator, and the context capture on both sides of the LLM."""
     context = LLMContext(tools=tools or NOT_GIVEN)
 
     aggregators = LLMContextAggregatorPair(
@@ -58,6 +60,7 @@ def build(
             VADFallback(),
             # Hears how each user turn sounded and puts the reading at the head of its transcription.
             PipecatVoiceReader(),
+            reading_filter,
             aggregators.user(),
             context_capture.before_llm(),
             llm,

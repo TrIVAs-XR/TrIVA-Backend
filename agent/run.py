@@ -18,6 +18,7 @@ from agent.observability import debug_log
 from agent.observability.llm_exchange import LLMExchange
 from agent.observability.study_log import StudyLog
 from agent.observability.timeline import Timeline
+from agent.reading_filter import ReadingFilter
 from agent.services import catalog
 
 
@@ -109,6 +110,7 @@ async def main():
                 [START_TASK] if intro else [],
                 camera,
                 capture,
+                ReadingFilter(study),
                 saver,
             ),
             params=PipelineParams(

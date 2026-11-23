@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1346" height="430" viewBox="0 0 1346 430" role="img" aria-labelledby="title">
-  <title id="title">Inside the agent: audio from the Unity client runs through transport in, the camera, which holds the newest camera frame, STT, VADFallback, the voice reader, the user aggregator, LLM, the reply strip, which removes a voice reading or a tagged input the LLM copied into its reply, TTS, transport out and the assistant aggregator. Both aggregators write the LLM context, which the LLM reads. Client messages reach world.py, which logs metrics and hands game events to Game; Game swaps the snapshot into the context and runs or interrupts the LLM. Observers watch every frame and write the debug and study logs.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="430" viewBox="0 0 1448 430" role="img" aria-labelledby="title">
+  <title id="title">Inside the agent: audio from the Unity client runs through transport in, the camera, which holds the newest camera frame, STT, VADFallback, the voice reader, the reading filter, which keeps only what stands out in a voice reading, the user aggregator, LLM, the reply strip, which removes a voice reading or a tagged input the LLM copied into its reply, TTS, transport out and the assistant aggregator. Both aggregators write the LLM context, which the LLM reads. Client messages reach world.py, which logs metrics and hands game events to Game; Game swaps the snapshot into the context and runs or interrupts the LLM. Observers watch every frame and write the debug and study logs.</title>
   <style>
     text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; text-anchor: middle; }
     .name { font-size: 14px; font-weight: 600; }
@@ -33,7 +33,7 @@
   <text class="name" x="60" y="132">Unity client</text>
   <text class="sub" x="60" y="152">VR/AR headset</text>
 
-  <rect class="agent" x="200" y="120" width="1132" height="96" rx="8"/>
+  <rect class="agent" x="200" y="120" width="1234" height="96" rx="8"/>
   <text class="sub" x="214" y="137" style="text-anchor: start">pipeline.py</text>
 
   <rect class="stage" x="214" y="144" width="84" height="44" rx="6"/>
@@ -59,32 +59,37 @@
   <line class="link" x1="707" y1="166" x2="723" y2="166" marker-end="url(#arrow)"/>
 
   <rect class="stage" x="724" y="144" width="84" height="44" rx="6"/>
-  <text x="766" y="162" font-size="12">user</text>
-  <text x="766" y="177" font-size="12">aggregator</text>
+  <text x="766" y="162" font-size="12">reading</text>
+  <text x="766" y="177" font-size="12">filter</text>
   <line class="link" x1="809" y1="166" x2="825" y2="166" marker-end="url(#arrow)"/>
-  <text class="label" x="766" y="206">VAD · Smart Turn</text>
 
   <rect class="stage" x="826" y="144" width="84" height="44" rx="6"/>
-  <text x="868" y="171" font-size="13">LLM</text>
+  <text x="868" y="162" font-size="12">user</text>
+  <text x="868" y="177" font-size="12">aggregator</text>
   <line class="link" x1="911" y1="166" x2="927" y2="166" marker-end="url(#arrow)"/>
+  <text class="label" x="868" y="206">VAD · Smart Turn</text>
 
   <rect class="stage" x="928" y="144" width="84" height="44" rx="6"/>
-  <text x="970" y="162" font-size="12">reply</text>
-  <text x="970" y="177" font-size="12">strip</text>
+  <text x="970" y="171" font-size="13">LLM</text>
   <line class="link" x1="1013" y1="166" x2="1029" y2="166" marker-end="url(#arrow)"/>
 
   <rect class="stage" x="1030" y="144" width="84" height="44" rx="6"/>
-  <text x="1072" y="171" font-size="13">TTS</text>
+  <text x="1072" y="162" font-size="12">reply</text>
+  <text x="1072" y="177" font-size="12">strip</text>
   <line class="link" x1="1115" y1="166" x2="1131" y2="166" marker-end="url(#arrow)"/>
 
   <rect class="stage" x="1132" y="144" width="84" height="44" rx="6"/>
-  <text x="1174" y="162" font-size="12">transport</text>
-  <text x="1174" y="177" font-size="12">out</text>
+  <text x="1174" y="171" font-size="13">TTS</text>
   <line class="link" x1="1217" y1="166" x2="1233" y2="166" marker-end="url(#arrow)"/>
 
   <rect class="stage" x="1234" y="144" width="84" height="44" rx="6"/>
-  <text x="1276" y="162" font-size="12">assistant</text>
-  <text x="1276" y="177" font-size="12">aggregator</text>
+  <text x="1276" y="162" font-size="12">transport</text>
+  <text x="1276" y="177" font-size="12">out</text>
+  <line class="link" x1="1319" y1="166" x2="1335" y2="166" marker-end="url(#arrow)"/>
+
+  <rect class="stage" x="1336" y="144" width="84" height="44" rx="6"/>
+  <text x="1378" y="162" font-size="12">assistant</text>
+  <text x="1378" y="177" font-size="12">aggregator</text>
 
   <line class="link" x1="112" y1="52" x2="206" y2="52" marker-end="url(#arrow)"/>
   <text class="label" x="159" y="44">client-message</text>
@@ -100,29 +105,29 @@
   <text class="name" x="462" y="49">Game</text>
   <text class="sub" x="462" y="66">game scenarios</text>
 
-  <line class="link" x1="514" y1="52" x2="772" y2="52" marker-end="url(#arrow)"/>
-  <text class="label" x="643" y="44">snapshot</text>
+  <line class="link" x1="514" y1="52" x2="874" y2="52" marker-end="url(#arrow)"/>
+  <text class="label" x="694" y="44">snapshot</text>
 
-  <rect class="box" x="776" y="28" width="124" height="48" rx="8"/>
-  <text class="name" x="838" y="57">LLM context</text>
+  <rect class="box" x="878" y="28" width="124" height="48" rx="8"/>
+  <text class="name" x="940" y="57">LLM context</text>
 
   <line class="link" x1="462" y1="78" x2="462" y2="118" marker-end="url(#arrow)"/>
   <text class="label" x="456" y="104" style="text-anchor: end">runs, interrupts</text>
 
-  <line class="link" x1="796" y1="142" x2="796" y2="80" marker-end="url(#arrow)"/>
-  <text class="label" x="790" y="112" style="text-anchor: end">participant turn</text>
+  <line class="link" x1="898" y1="142" x2="898" y2="80" marker-end="url(#arrow)"/>
+  <text class="label" x="892" y="112" style="text-anchor: end">participant turn</text>
 
-  <line class="link dash" x1="868" y1="78" x2="868" y2="140" marker-end="url(#arrow)"/>
-  <text class="label" x="874" y="112" style="text-anchor: start">read</text>
+  <line class="link dash" x1="970" y1="78" x2="970" y2="140" marker-end="url(#arrow)"/>
+  <text class="label" x="976" y="112" style="text-anchor: start">read</text>
 
-  <path class="link" d="M1276,142 V52 H904" marker-end="url(#arrow)"/>
-  <text class="label" x="1090" y="44">agent turn</text>
+  <path class="link" d="M1378,142 V52 H1006" marker-end="url(#arrow)"/>
+  <text class="label" x="1192" y="44">agent turn</text>
 
   <line class="link" x1="112" y1="166" x2="212" y2="166" marker-end="url(#arrow)"/>
   <text class="label" x="156" y="158">audio</text>
 
-  <path class="link" d="M1174,190 V236 H112" marker-end="url(#arrow)"/>
-  <text class="label" x="1046" y="254">audio, RTVI events</text>
+  <path class="link" d="M1276,190 V236 H112" marker-end="url(#arrow)"/>
+  <text class="label" x="1148" y="254">audio, RTVI events</text>
 
   <rect class="group" x="200" y="270" width="420" height="70" rx="8"/>
   <text class="sub" x="214" y="288" style="text-anchor: start">observers, watching every frame</text>
