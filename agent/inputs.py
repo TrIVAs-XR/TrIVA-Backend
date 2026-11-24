@@ -31,6 +31,9 @@ INPUTS = "inputs"
 # The client inputs the context holds, each wrapped in a tag named after its kind, as a game snapshot is.
 CLIENT_INPUTS = ("held", "pointing")
 
+# What a held or pointing input reads when no hand has had anything since the participant last started speaking.
+NOTHING = "nothing"
+
 # Where an input the client works out was processed.
 CLIENT = "client"
 
@@ -45,6 +48,32 @@ READING_END = ") "
 def selected(kind: str) -> bool:
     """Whether an input of this kind goes into the LLM context; every input does for now."""
     return True
+
+
+def _same_object(earlier: Any, later: Any) -> bool:
+    """Whether two states of a hand are one object, perhaps described anew, such as a flask before and after it is filled."""
+    return isinstance(earlier, dict) and isinstance(later, dict) and earlier.get("id") is not None and earlier["id"] == later.get("id")
+
+
+def _add(history: list, state: Any):
+    """Add a hand's newest state to its history: the same object described anew replaces the last entry, and an unchanged state adds nothing."""
+    if history and _same_object(history[-1], state):
+        history[-1] = state
+    elif not history or history[-1] != state:
+        history.append(state)
+
+
+def _content(hands: dict[str, list]) -> Any:
+    """What a held or pointing input reads from its hands' histories: each hand that has had something, as its one state or, if it changed, every state in order with null for empty; NOTHING when no hand has had anything."""
+    content = {hand: history[0] if len(history) == 1 else list(history) for hand, history in hands.items() if any(state is not None for state in history)}
+    return content or NOTHING
+
+
+def _wrap(kind: str, content: Any) -> str:
+    """A held or pointing input as the context holds it: NOTHING as plain text between its tags, anything else as JSON, as a game snapshot is."""
+    if content == NOTHING:
+        return f"<{kind}>\n{NOTHING}\n</{kind}>"
+    return wrap(kind, content)
 
 
 def _text(message: Any) -> str | None:
@@ -64,7 +93,8 @@ def _client_input(text: str) -> tuple[str, Any] | None:
     for kind, tag in [*((kind, kind) for kind in CLIENT_INPUTS), ("game", GAME_TAG)]:
         start, end = f"<{tag}>\n", f"\n</{tag}>"
         if text.startswith(start) and text.endswith(end):
-            return kind, json.loads(text.removeprefix(start).removesuffix(end))
+            body = text.removeprefix(start).removesuffix(end)
+            return kind, NOTHING if body == NOTHING else json.loads(body)
     return None
 
 
@@ -147,6 +177,8 @@ class Inputs(BaseObserver):
         self._llm_location = llm_location
         self._messages: dict[str, dict] = {}
         self._known: dict[str, Any] = {}
+        # Each held or pointing hand's states since the participant last started speaking, oldest first, by kind and hand.
+        self._hands: dict[str, dict[str, list]] = {}
         self._speaking = False
         # Every context message an earlier call has read, by id, with the message itself.
         self._seen: dict[int, Any] = {}
@@ -158,10 +190,27 @@ class Inputs(BaseObserver):
         self._open: list[dict] = []
 
     async def receive(self, kind: str, data: Any):
-        """Put the client's newest held or pointing state into the context in place of the previous one, and update the draft."""
+        """Add the client's newest held or pointing state to each hand's history and put what the histories read into the context."""
+        hands = self._hands.setdefault(kind, {})
+        for hand, state in data.items():
+            _add(hands.setdefault(hand, []), state)
+        await self._update(kind)
+
+    async def _start_over(self):
+        """Start each hand's history over from its current state, as the participant starts speaking."""
+        for kind, hands in list(self._hands.items()):
+            for history in hands.values():
+                del history[:-1]
+            await self._update(kind)
+
+    async def _update(self, kind: str):
+        """Swap what this kind's hand histories read into the context in place of the previous message, and update the draft, when it has changed."""
+        content = _content(self._hands[kind])
+        if kind in self._known and self._known[kind] == content:
+            return
         if selected(kind):
-            await self._queue([LLMMessagesTransformFrame(transform=self._swap_in(kind, data), run_llm=False)])
-        await self.note(kind, data)
+            await self._queue([LLMMessagesTransformFrame(transform=self._swap_in(kind, content), run_llm=False)])
+        await self.note(kind, content)
 
     async def note(self, kind: str, data: Any):
         """Note an input the next LLM call is meant to get, such as a game snapshot another component puts into the context."""
@@ -171,7 +220,7 @@ class Inputs(BaseObserver):
     def _swap_in(self, kind: str, data: Any) -> Callable[[list], list]:
         """Build the context transform that drops this kind's previous message and appends the new one."""
         previous = self._messages.get(kind)
-        message = {"role": "developer", "content": wrap(kind, data)}
+        message = {"role": "developer", "content": _wrap(kind, data)}
         self._messages[kind] = message
 
         def swap(messages: list) -> list:
@@ -290,7 +339,10 @@ class Inputs(BaseObserver):
         if not data.first_push:
             return
         if isinstance(frame, UserStartedSpeakingFrame):
-            self._speaking = True
+            # Start the hands over on a turn's first speech only.
+            if not self._speaking:
+                self._speaking = True
+                await self._start_over()
             await self._update_draft()
         elif not self._open:
             return

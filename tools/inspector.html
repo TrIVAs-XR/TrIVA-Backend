@@ -247,10 +247,11 @@ function object(o) {
   return `${o.id ?? o.name ?? "?"} (${o.kind ?? "?"})`;
 }
 
-/** Summarises a per-hand input such as held or pointing in one line. */
+/** Summarises a per-hand input such as held or pointing in one line: each hand present with its state or its states in order, or the plain text the input reads. */
 function hands(data) {
+  if (typeof data === "string") return data;
   if (!data || typeof data !== "object") return JSON.stringify(data);
-  return `left ${object(data.left)}, right ${object(data.right)}`;
+  return Object.entries(data).map(([hand, state]) => `${hand} ${Array.isArray(state) ? state.map(object).join(", then ") : object(state)}`).join("; ");
 }
 
 /** Summarises a game snapshot by its event and the recipe's status. */

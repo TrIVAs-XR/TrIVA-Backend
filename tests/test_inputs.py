@@ -25,8 +25,13 @@ from agent.game import wrap
 from agent.inputs import INPUTS, ContextCapture, Inputs
 from agent.observability.study_log import StudyLog
 
-HANDS = {"left": None, "right": {"id": "flask-3", "kind": "flask"}}
-OTHER_HANDS = {"left": {"id": "flask-1", "kind": "flask"}, "right": None}
+FLASK_1 = {"id": "flask-1", "kind": "flask"}
+FLASK_3 = {"id": "flask-3", "kind": "flask"}
+EMPTY = {"left": None, "right": None}
+HANDS = {"left": None, "right": FLASK_3}
+OTHER_HANDS = {"left": FLASK_1, "right": None}
+# What a held or pointing input reads after OTHER_HANDS, then HANDS, since the participant last started speaking.
+BOTH_IN_TURN = {"left": [FLASK_1, None], "right": [None, FLASK_3]}
 
 
 class _Worker:
@@ -140,14 +145,115 @@ def _logged(study: StudyLog, path) -> list[dict]:
     return [{k: v for k, v in line.items() if k not in ("event", "ts", "iso", "turn")} for line in lines if line["event"] == "input_record"]
 
 
-async def test_a_newer_state_replaces_the_previous_one_in_the_context(inputs, worker):
-    """Only the newest held state is in the context, after the other messages."""
+def _held(worker: _Worker) -> list[str]:
+    """The held messages in the worker's context."""
+    return [m["content"] for m in worker.messages if m["content"].startswith("<held>")]
+
+
+async def test_a_newer_state_replaces_the_previous_message_in_the_context(inputs, worker):
+    """Only one held message is in the context, after the other messages, reading every state each hand had."""
     await inputs.receive("held", OTHER_HANDS)
     await inputs.receive("held", HANDS)
-    held = [m for m in worker.messages if m["content"].startswith("<held>")]
-    assert len(held) == 1
-    assert held[0]["content"] == wrap("held", HANDS)
-    assert worker.messages[-1] is held[0]
+    assert _held(worker) == [wrap("held", BOTH_IN_TURN)]
+    assert worker.messages[-1]["content"] == _held(worker)[0]
+
+
+async def test_empty_hands_read_nothing(inputs, worker):
+    """A held state with both hands empty, and nothing held before it, reads nothing as plain text."""
+    await inputs.receive("held", EMPTY)
+    assert _held(worker) == ["<held>\nnothing\n</held>"]
+
+
+async def test_an_empty_hand_is_left_out(inputs, worker):
+    """A hand that has held nothing does not appear, and a hand that held one object reads that object alone."""
+    await inputs.receive("held", HANDS)
+    assert _held(worker) == [wrap("held", {"right": FLASK_3})]
+
+
+async def test_an_object_dropped_before_the_call_still_counts(inputs, worker):
+    """Letting go of an object after grabbing it lists the object, then null for the empty hand."""
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", EMPTY)
+    assert _held(worker) == [wrap("held", {"left": [FLASK_1, None]})]
+
+
+async def test_every_state_of_a_hand_reaches_the_context(inputs, worker):
+    """Grabbing, letting go and grabbing another object lists all three states, each swapped in as it arrives."""
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", EMPTY)
+    await inputs.receive("held", {"left": FLASK_3, "right": None})
+    assert _held(worker) == [wrap("held", {"left": [FLASK_1, None, FLASK_3]})]
+
+
+async def test_a_start_over_after_several_states_reaches_the_context(inputs, worker):
+    """Speech start after a hand changed swaps in its current state alone."""
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", {"left": FLASK_3, "right": None})
+    await _push(inputs, UserStartedSpeakingFrame())
+    assert _held(worker) == [wrap("held", {"left": FLASK_3})]
+
+
+async def test_two_objects_without_an_id_stay_two_entries(inputs, worker):
+    """Objects Unity cannot refer to carry no id, so one following the other is listed as a change."""
+    cup = {"id": None, "kind": "unknown", "name": "Cup"}
+    lid = {"id": None, "kind": "unknown", "name": "Lid"}
+    await inputs.receive("held", {"left": cup, "right": None})
+    await inputs.receive("held", {"left": lid, "right": None})
+    assert _held(worker) == [wrap("held", {"left": [cup, lid]})]
+
+
+async def test_the_same_object_described_anew_replaces_its_entry(inputs, worker):
+    """A held object whose description changes stays one entry, with its newest description."""
+    filled = {**FLASK_1, "substance": "Flame"}
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", {"left": filled, "right": None})
+    assert _held(worker) == [wrap("held", {"left": filled})]
+
+
+async def test_the_history_starts_over_when_the_participant_starts_speaking(inputs, worker):
+    """Speech start keeps each hand's current state only, so an object dropped before it reads nothing."""
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", EMPTY)
+    await _push(inputs, UserStartedSpeakingFrame())
+    assert _held(worker) == ["<held>\nnothing\n</held>"]
+
+
+async def test_speech_resumed_before_the_call_keeps_the_history(inputs, worker, capture):
+    """A second speech start before the turn's call is the same turn, so a drop between them still counts; the next turn starts over."""
+    await _push(inputs, UserStartedSpeakingFrame())
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", EMPTY)
+    await _push(inputs, UserStartedSpeakingFrame())
+    assert _held(worker) == [wrap("held", {"left": [FLASK_1, None]})]
+    worker.messages.append({"role": "user", "content": "This one?"})
+    await _call(inputs, worker, capture)
+    await _push(inputs, UserStartedSpeakingFrame())
+    assert _held(worker) == ["<held>\nnothing\n</held>"]
+
+
+async def test_speech_that_never_reaches_the_llm_keeps_the_history_into_the_next_turn(inputs, worker):
+    """A false start with no call on a user message leaves the turn open, so the next speech does not start the hands over."""
+    await _push(inputs, UserStartedSpeakingFrame())
+    await inputs.receive("held", OTHER_HANDS)
+    await inputs.receive("held", EMPTY)
+    await _push(inputs, UserStartedSpeakingFrame())
+    assert _held(worker) == [wrap("held", {"left": [FLASK_1, None]})]
+
+
+async def test_the_history_does_not_start_over_at_a_call(inputs, worker, rtvi, capture):
+    """A call between two states leaves the history running, so the next call reads both."""
+    await inputs.receive("held", OTHER_HANDS)
+    await _call(inputs, worker, capture)
+    await inputs.receive("held", HANDS)
+    await _call(inputs, worker, capture)
+    assert [e["data"] for e in rtvi.records("sent")[1]["inputs"]] == [BOTH_IN_TURN]
+
+
+async def test_a_call_records_nothing_as_its_data(inputs, worker, rtvi, capture):
+    """An input reading nothing is recorded with nothing as its data."""
+    await inputs.receive("pointing", EMPTY)
+    await _call(inputs, worker, capture)
+    assert rtvi.records("sent")[0]["inputs"] == [{"input": "pointing", "data": "nothing", "where": "client"}]
 
 
 async def test_a_draft_is_sent_when_it_changes_and_only_then(inputs, rtvi):
@@ -175,7 +281,7 @@ async def test_a_call_is_recorded_from_the_context_it_reads(inputs, worker, rtvi
             "llm": "cloud",
             "inputs": [
                 {"input": "transcript", "data": "Is this the right one?", "where": "local"},
-                {"input": "held", "data": HANDS, "where": "client"},
+                {"input": "held", "data": {"right": FLASK_3}, "where": "client"},
             ],
             "dropped": [],
         }
@@ -192,8 +298,8 @@ async def test_an_input_that_misses_the_call_is_listed_as_dropped(inputs, worker
     worker.messages = snapshot
     await _call(inputs, worker, capture)
     (sent,) = rtvi.records("sent")
-    assert {"input": "pointing", "data": OTHER_HANDS, "where": "client"} in sent["inputs"]
-    assert sent["dropped"] == [{"input": "pointing", "data": HANDS, "where": "client"}]
+    assert {"input": "pointing", "data": {"left": FLASK_1}, "where": "client"} in sent["inputs"]
+    assert sent["dropped"] == [{"input": "pointing", "data": BOTH_IN_TURN, "where": "client"}]
 
 
 async def test_a_transcript_counts_once_and_a_game_snapshot_triggers(inputs, worker, rtvi, capture):
@@ -287,7 +393,7 @@ async def test_the_next_draft_is_sent_right_after_a_call(inputs, worker, rtvi, c
     """Inputs that stay in the context are shown as the next call's draft without waiting for a change."""
     await inputs.receive("held", HANDS)
     await _call(inputs, worker, capture)
-    assert rtvi.records("draft")[-1] == {"id": 2, "state": "draft", "inputs": [{"input": "held", "data": HANDS, "where": "client"}], "dropped": []}
+    assert rtvi.records("draft")[-1] == {"id": 2, "state": "draft", "inputs": [{"input": "held", "data": {"right": FLASK_3}, "where": "client"}], "dropped": []}
 
 
 async def test_a_snapshot_swapped_in_after_the_user_message_leaves_the_user_turn_the_trigger(inputs, worker, rtvi, capture):
