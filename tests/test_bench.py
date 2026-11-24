@@ -127,3 +127,10 @@ def test_an_entry_not_bound_to_a_model_refuses_a_replacement():
     """Nemotron's model is fixed by its container, so naming another one stops at once."""
     with pytest.raises(SystemExit):
         stt.build("nemotron", "another-model", CONFIG, None)
+
+
+def test_a_reply_is_checked_without_its_object_markers():
+    """A session never speaks a marker, so an ID such as ice_bath does not count as formatting and adds no words."""
+    said = checks.spoken("<refer>ice_bath</refer>That one heats it. <refer>flask-3</refer>And this one.")
+    assert said == "That one heats it. And this one."
+    assert checks.automatic(said)["no_markup"]

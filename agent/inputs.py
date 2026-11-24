@@ -13,16 +13,16 @@ from pipecat.frames.frames import (
     LLMContextFrame,
     LLMFullResponseEndFrame,
     LLMMessagesTransformFrame,
-    LLMTextFrame,
     UserStartedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
+from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi.processor import RTVIProcessor
 from pipecat.services.llm_service import LLMService
 
 from agent.game import TAG as GAME_TAG
-from agent.game import wrap
+from agent.game import reply_words, wrap
 from agent.observability.study_log import StudyLog
 
 # The RTVI server-message type the agent sends each input record under, as {"t": "inputs", "d": {"id": ..., "state": ..., ...}}.
@@ -337,6 +337,14 @@ class Inputs(BaseObserver):
             if isinstance(data.destination, LLMService):
                 await self._sent(frame)
             return
+        # A reply's end counts as the reply strip passes it on, after the words it held back for a whole sentence.
+        if isinstance(frame, LLMFullResponseEndFrame):
+            if isinstance(data.source, LLMTextProcessor) and self._open:
+                current = self._open[-1]
+                current["ended"] = True
+                if not current["has_text"]:
+                    await self._close([current], "answered")
+            return
         if not data.first_push:
             return
         if isinstance(frame, UserStartedSpeakingFrame):
@@ -349,15 +357,10 @@ class Inputs(BaseObserver):
             return
         elif isinstance(frame, InterruptionFrame):
             await self._close(list(self._open), "interrupted")
-        elif isinstance(frame, LLMTextFrame) and frame.text.strip():
+        elif reply_words(data):
             self._open[-1]["has_text"] = True
         elif isinstance(frame, BotStartedSpeakingFrame):
             for record in self._open:
                 record["heard"] = record["has_text"]
-        elif isinstance(frame, LLMFullResponseEndFrame):
-            current = self._open[-1]
-            current["ended"] = True
-            if not current["has_text"]:
-                await self._close([current], "answered")
         elif isinstance(frame, BotStoppedSpeakingFrame):
             await self._close([r for r in self._open if r["ended"] and r["heard"]], "answered")

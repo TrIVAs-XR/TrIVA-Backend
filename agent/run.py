@@ -6,14 +6,16 @@ from pathlib import Path
 
 from loguru import logger
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
+from pipecat.processors.frameworks.rtvi import RTVIObserverParams
 from pipecat.transcriptions.language import Language
 from pipecat.workers.runner import WorkerRunner
 
-from agent import config, frame_saver, join, livekit_server, nemotron_server, pipeline, roster, scenarios, session, world
+from agent import config, frame_saver, join, livekit_server, nemotron_server, nonverbal, pipeline, roster, scenarios, session, world
 from agent.camera import Camera
 from agent.config import AUDIO_IN, AUDIO_OUT
 from agent.game import START_TASK, Game
 from agent.inputs import ContextCapture, Inputs
+from agent.nonverbal import REFER, ReferRelay, SceneObjects
 from agent.observability import debug_log
 from agent.observability.llm_exchange import LLMExchange
 from agent.observability.study_log import StudyLog
@@ -49,7 +51,7 @@ async def main():
     language = Language(run.language)
     scenario = scenarios.SCENARIOS[run.scenario]
     stt = catalog.STT[run.stt](cfg, language)
-    llm = catalog.LLM[run.llm](cfg, scenario.system_prompt(run.language))
+    llm = catalog.LLM[run.llm](cfg, nonverbal.prompt(scenario.system_prompt(run.language)))
     tts = catalog.TTS[run.tts](cfg, language)
     # Written to the study log and sent to the client from this one dict, so the two cannot disagree about what the session is.
     settings = {
@@ -122,6 +124,8 @@ async def main():
                 enable_expressive_conversation=True,
             ),
             observers=[Timeline(), LLMExchange(), *study.observers],
+            # An object marker is no words of the reply, so the client's bot output leaves it out as the TTS does.
+            rtvi_observer_params=RTVIObserverParams(skip_text_types=[REFER]),
             idle_timeout_secs=None,
         )
 
@@ -134,7 +138,8 @@ async def main():
         greeting = scenario.greeting[run.language] if scenario.greeting else None
         inputs = Inputs(worker.queue_frames, worker.rtvi, study, capture, catalog.LOCATIONS[run.stt], catalog.LOCATIONS[run.llm])
         worker.add_observer(inputs)
-        world.attach(worker, transport, greeting, study, settings, game, inputs)
+        worker.add_observer(ReferRelay(worker.rtvi, study))
+        world.attach(worker, transport, greeting, study, settings, game, inputs, SceneObjects(worker.queue_frames))
 
         runner = WorkerRunner()
         await runner.add_workers(worker)

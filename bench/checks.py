@@ -8,6 +8,8 @@ from typing import Any
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.llm_service import LLMService
 
+from agent.nonverbal import REFER
+
 # Formatting a voice never speaks: markdown marks, list items and numbered lines.
 MARKUP = re.compile(r"[*#`_\[\]]|^\s*([-•]|\d+\.)\s", re.MULTILINE)
 
@@ -15,6 +17,9 @@ MARKUP = re.compile(r"[*#`_\[\]]|^\s*([-•]|\d+\.)\s", re.MULTILINE)
 LEAK = re.compile(r"game[ -]?state|snapshot|json|\bclient\b|spielzustand|spielstand", re.IGNORECASE)
 
 SENTENCE_END = re.compile(r"[.!?]+(\s|$)")
+
+# An object marker in a reply, which a session never speaks.
+MARKER = re.compile(rf"<{REFER}>.*?</{REFER}>\s*", re.DOTALL)
 
 JUDGE_SYSTEM = """You grade the replies of Iva, a spoken AI lab supervisor in a virtual chemistry lab, in a benchmark.
 You get the conversation so far and one yes/no question. Lines in square brackets are what the system did, which the participant never sees: game-state updates and tool calls. The reply the question is about is marked REPLY when there is one.
@@ -26,6 +31,11 @@ JUDGE_SCHEMA = {
     "required": ["pass", "reason"],
     "additionalProperties": False,
 }
+
+
+def spoken(text: str) -> str:
+    """Return a reply as a session speaks it, without its object markers."""
+    return MARKER.sub("", text)
 
 
 def automatic(text: str) -> dict[str, bool]:

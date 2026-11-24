@@ -1,4 +1,4 @@
-"""What the agent and the client tell each other outside of audio: each LLM thought, sent whole, the client's inputs, logged as sent and handed to the inputs, and the client leaving, logged."""
+"""What the agent and the client tell each other outside of audio: each LLM thought, sent whole, the client's inputs and object list, logged as sent and handed on, and the client leaving, logged."""
 
 import json
 
@@ -9,7 +9,7 @@ from pipecat.processors.frame_processor import FrameDirection
 from pipecat.processors.frameworks.rtvi.models import ClientMessage
 
 from agent.observability.study_log import StudyLog
-from agent.world import THOUGHT, ThoughtRelay, attach
+from agent.world import OBJECTS, THOUGHT, ThoughtRelay, attach
 
 
 class _RTVI:
@@ -74,6 +74,18 @@ class _Inputs:
         self.received.append((kind, data))
 
 
+class _SceneObjects:
+    """Stand-in for the scene objects, recording each object list handed to them."""
+
+    def __init__(self):
+        """Start with nothing received."""
+        self.received = []
+
+    async def receive(self, data):
+        """Record one object list."""
+        self.received.append(data)
+
+
 async def _push(relay: ThoughtRelay, frame):
     """Show the relay one frame moving downstream."""
     await relay.on_push_frame(
@@ -100,7 +112,7 @@ async def test_a_client_input_is_logged_as_sent(tmp_path, input_type):
     study = StudyLog(path)
     worker = _Worker()
     inputs = _Inputs()
-    attach(worker, _Transport(), greeting=None, study=study, settings={}, game=None, inputs=inputs)
+    attach(worker, _Transport(), greeting=None, study=study, settings={}, game=None, inputs=inputs, objects=_SceneObjects())
     hands = {"left": None, "right": {"id": "flask-3", "kind": "flask", "shape": "beaker", "substance": None}}
     await worker.rtvi.handlers["on_client_message"](worker.rtvi, ClientMessage(msg_id="1", type=input_type, data=hands))
     study.close()
@@ -115,8 +127,23 @@ async def test_a_client_leaving_is_logged(tmp_path):
     path = tmp_path / "study.jsonl"
     study = StudyLog(path)
     transport = _Transport()
-    attach(_Worker(), transport, greeting=None, study=study, settings={}, game=None, inputs=_Inputs())
+    attach(_Worker(), transport, greeting=None, study=study, settings={}, game=None, inputs=_Inputs(), objects=_SceneObjects())
     await transport.handlers["on_client_disconnected"](transport, {"id": "unity"})
     study.close()
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert [line["client"] for line in lines if line["event"] == "client_disconnected"] == ["unity"]
+
+
+async def test_the_object_list_is_logged_as_sent_and_handed_on(tmp_path):
+    """The client's object list lands in the study log as a scene_objects line with its data unchanged and goes to the scene objects."""
+    path = tmp_path / "study.jsonl"
+    study = StudyLog(path)
+    worker = _Worker()
+    objects = _SceneObjects()
+    attach(worker, _Transport(), greeting=None, study=study, settings={}, game=None, inputs=_Inputs(), objects=objects)
+    listed = [{"id": "ice_bath", "kind": "object"}, {"id": "flask-1", "kind": "flask", "shape": "erlenmeyer", "substance": None}]
+    await worker.rtvi.handlers["on_client_message"](worker.rtvi, ClientMessage(msg_id="1", type=OBJECTS, data=listed))
+    study.close()
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [line["data"] for line in lines if line["event"] == "scene_objects"] == [listed]
+    assert objects.received == [listed]

@@ -31,7 +31,7 @@ from pipecat.services.llm_service import FunctionCallParams, LLMService
 from pipecat.utils.types import NOT_GIVEN
 from pipecat.workers.runner import WorkerRunner
 
-from agent import config, scenarios
+from agent import config, nonverbal, scenarios
 from agent.game import START_TASK, STARTED, TAG, wrap
 from agent.services import catalog
 from bench import checks, record
@@ -187,7 +187,7 @@ def _setup(case: dict[str, Any]) -> tuple[str, str | None, list]:
     scenario = scenarios.SCENARIOS[case["scenario"]]
     greeting = scenario.greeting[case["language"]] if scenario.greeting else None
     intro = scenario.reaction is not None and greeting is not None
-    return scenario.system_prompt(case["language"]), greeting, [START_TASK] if intro else []
+    return nonverbal.prompt(scenario.system_prompt(case["language"])), greeting, [START_TASK] if intro else []
 
 
 def setup_hash(case: dict[str, Any]) -> str:
@@ -222,17 +222,17 @@ async def run_case(llm: LLMService, judge: LLMService, case: dict[str, Any]) -> 
                 await conversation.append(_tool_call(step["tool"]))
             if reply is None:
                 continue
+            # Judged, checked and counted as the participant would hear it; the record keeps the reply with its markers.
+            said = checks.spoken(reply.text)
             transcript += [("tool", name) for name in reply.tools]
-            transcript.append(("agent", reply.text))
-            passed, reasons = await checks.evaluate(
-                step.get("expect", []), reply.text, reply.tools, judge, transcript, len(transcript) - 1
-            )
+            transcript.append(("agent", said))
+            passed, reasons = await checks.evaluate(step.get("expect", []), said, reply.tools, judge, transcript, len(transcript) - 1)
             steps.append(
                 {
                     "step": index,
                     **vars(reply),
-                    **checks.measure(reply.text),
-                    "checks": {**checks.automatic(reply.text), **passed},
+                    **checks.measure(said),
+                    "checks": {**checks.automatic(said), **passed},
                     "reasons": reasons,
                 }
             )

@@ -14,6 +14,7 @@ from pipecat.services.tts_service import TTSService
 from pipecat.transcriptions.language import Language
 
 from agent.config import Config
+from agent.nonverbal import REFER
 
 # ElevenLabs' premade voices. Voice becomes a study condition later, at which point it moves into the session.
 NICHALIA= "XfNU2rGpBa01ckF309OY"
@@ -68,20 +69,21 @@ def _mistral_llm(config: Config, system_instruction: str | None, model: str, rea
 
 
 def _elevenlabs(config: Config, language: Language, model: str, voice: str) -> TTSService:
-    """Build one of ElevenLabs' streaming voices."""
+    """Build one of ElevenLabs' streaming voices, which leaves object markers unspoken."""
     from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
     return ElevenLabsTTSService(
         api_key=_demand(config.elevenlabs_api_key, "ELEVENLABS_API_KEY"),
         settings=ElevenLabsTTSService.Settings(model=model, voice=voice, language=language),
+        skip_text_types=[REFER],
     )
 
 
 def _kokoro(config: Config, language: Language, voice: str) -> TTSService:
-    """Build Kokoro, a local ONNX voice that needs no credential or network access once its model is cached."""
+    """Build Kokoro, a local ONNX voice that needs no credential or network access once its model is cached and leaves object markers unspoken."""
     from pipecat.services.kokoro.tts import KokoroTTSService
 
-    return KokoroTTSService(settings=KokoroTTSService.Settings(voice=voice, language=language))
+    return KokoroTTSService(settings=KokoroTTSService.Settings(voice=voice, language=language), skip_text_types=[REFER])
 
 
 STT: dict[str, Callable[[Config, Language], STTService]] = {

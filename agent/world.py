@@ -12,6 +12,7 @@ from pipecat.transports.base_transport import BaseTransport
 
 from agent.game import Game
 from agent.inputs import Inputs
+from agent.nonverbal import SceneObjects
 from agent.observability.study_log import StudyLog
 
 # The RTVI client-message type Unity sends a measurement under, as {"t": "metric", "d": {...}}. Its data is logged as sent, so a new metric needs no change here.
@@ -22,6 +23,9 @@ GAME_EVENT = "game-event"
 
 # The RTVI client-message types Unity sends a participant input under, each with that input's full current state, as {"t": "held", "d": {"left": ..., "right": ...}}. They are logged as sent and handed to the inputs, which put them into the LLM context.
 CLIENT_INPUTS = {"held", "pointing"}
+
+# The RTVI client-message type Unity sends the objects in the scene at the start under, as {"t": "objects", "d": [<object>, ...]}, once it has the session message. They are logged as sent and put into the LLM context, so the agent knows what it can refer to.
+OBJECTS = "objects"
 
 # The RTVI server-message type the agent sends the session's settings under, as {"t": "session", "d": {...}}.
 SESSION = "session"
@@ -59,6 +63,7 @@ def attach(
     settings: dict[str, Any],
     game: Game | None,
     inputs: Inputs,
+    objects: SceneObjects,
 ):
     """Wire the client handshake, the client's messages, its leaving and the thoughts sent to it, so the agent opens only once a client is there to hear it."""
     worker.add_observer(ThoughtRelay(worker.rtvi))
@@ -84,12 +89,15 @@ def attach(
 
     @worker.rtvi.event_handler("on_client_message")
     async def message(rtvi, message: ClientMessage):
-        """Log a client metric or input to the study log as sent, hand an input to the inputs and a game snapshot to the game and the inputs; any other message type is not part of the contract."""
+        """Log a client metric, input or object list to the study log as sent, hand an input to the inputs, the object list to the scene objects and a game snapshot to the game and the inputs; any other message type is not part of the contract."""
         if message.type == METRIC:
             study.write("client_metric", data=message.data)
         elif message.type in CLIENT_INPUTS:
             study.write("client_input", input=message.type, data=message.data)
             await inputs.receive(message.type, message.data)
+        elif message.type == OBJECTS:
+            study.write("scene_objects", data=message.data)
+            await objects.receive(message.data)
         elif message.type == GAME_EVENT and game is not None:
             await game.receive(message.data)
             await inputs.note("game", message.data)

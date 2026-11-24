@@ -5,18 +5,19 @@ import json
 
 import pytest
 from pipecat.frames.frames import (
+    AggregatedTextFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     InterruptionFrame,
     LLMContextFrame,
     LLMFullResponseEndFrame,
     LLMMessagesTransformFrame,
-    LLMTextFrame,
     UserStartedSpeakingFrame,
 )
 from pipecat.observers.base_observer import FramePushed
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import LLMService
 from pipecat.tests.utils import run_test
@@ -24,6 +25,7 @@ from pipecat.tests.utils import run_test
 from agent.game import TAG as GAME_TAG
 from agent.game import wrap
 from agent.inputs import INPUTS, ContextCapture, Inputs
+from agent.nonverbal import REFER
 from agent.observability.study_log import StudyLog
 
 FLASK_1 = {"id": "flask-1", "kind": "flask"}
@@ -112,17 +114,27 @@ def inputs(worker, rtvi, study, capture):
     return Inputs(worker.queue_frames, rtvi, study, capture, stt_location="local", llm_location="cloud")
 
 
-async def _push(inputs: Inputs, frame, destination=None):
+async def _push(inputs: Inputs, frame, destination=None, source=None):
     """Show the inputs one frame moving through the pipeline."""
     await inputs.on_push_frame(
         FramePushed(
-            source=_Processor(),
+            source=source or _Processor(),
             destination=destination or _Processor(),
             frame=frame,
             direction=FrameDirection.DOWNSTREAM,
             timestamp=0,
         )
     )
+
+
+async def _said(inputs: Inputs, text: str, text_type: str = "sentence"):
+    """Show the inputs a unit of the reply as the reply strip passes it on: words, or an object marker with text_type refer."""
+    await _push(inputs, AggregatedTextFrame(text=text, text_type=text_type), source=LLMTextProcessor())
+
+
+async def _ended(inputs: Inputs):
+    """Show the inputs the reply's end as the reply strip passes it on, after any words it held back."""
+    await _push(inputs, LLMFullResponseEndFrame(), source=LLMTextProcessor())
 
 
 async def _call(inputs: Inputs, worker: _Worker, capture: ContextCapture, before_observer=None, upstream=False):
@@ -327,7 +339,7 @@ async def test_a_record_carries_the_study_log_turn_except_a_draft(inputs, worker
     await asyncio.sleep(0)
     worker.messages.append({"role": "user", "content": "Hello."})
     await _call(inputs, worker, capture)
-    await _push(inputs, LLMFullResponseEndFrame())
+    await _ended(inputs)
     assert [r["turn"] for r in rtvi.records() if r["state"] != "draft"] == [1, 1]
     assert all("turn" not in r for r in rtvi.records("draft"))
     assert [r["turn"] for r in _logged(study, tmp_path / "P01.jsonl")] == [1, 1]
@@ -355,9 +367,9 @@ async def test_an_emotion_reading_is_its_own_input(inputs, worker, rtvi, capture
 async def test_a_reply_heard_to_its_end_is_answered(inputs, worker, rtvi, study, tmp_path, capture):
     """The record closes as answered once the reply has ended and the agent has stopped speaking it."""
     await _call(inputs, worker, capture)
-    await _push(inputs, LLMTextFrame(text="Yes."))
+    await _said(inputs, "Yes.")
     await _push(inputs, BotStartedSpeakingFrame())
-    await _push(inputs, LLMFullResponseEndFrame())
+    await _ended(inputs)
     assert rtvi.records("answered") == []
     await _push(inputs, BotStoppedSpeakingFrame())
     assert rtvi.records("answered") == [{"id": 1, "state": "answered", "turn": 0}]
@@ -367,14 +379,14 @@ async def test_a_reply_heard_to_its_end_is_answered(inputs, worker, rtvi, study,
 async def test_a_reply_without_words_is_answered_when_it_ends(inputs, worker, rtvi, capture):
     """A call that only calls a tool has nothing to hear, so it closes when its reply ends."""
     await _call(inputs, worker, capture)
-    await _push(inputs, LLMFullResponseEndFrame())
+    await _ended(inputs)
     assert rtvi.records("answered") == [{"id": 1, "state": "answered", "turn": 0}]
 
 
 async def test_a_reply_cut_off_is_interrupted(inputs, worker, rtvi, capture):
     """An interruption before the reply is heard closes the record as interrupted, once."""
     await _call(inputs, worker, capture)
-    await _push(inputs, LLMTextFrame(text="Yes, that"))
+    await _said(inputs, "Yes, that")
     await _push(inputs, BotStartedSpeakingFrame())
     await _push(inputs, InterruptionFrame())
     await _push(inputs, BotStoppedSpeakingFrame())
@@ -430,12 +442,12 @@ async def test_a_call_while_the_participant_speaks_keeps_the_transcript_in_the_d
 async def test_a_spoken_reply_followed_by_a_tool_call_is_answered_not_interrupted(inputs, worker, rtvi, capture):
     """A reply heard to its end stays answered when the call for its tool result starts before the agent stops speaking."""
     await _call(inputs, worker, capture)
-    await _push(inputs, LLMTextFrame(text="Let me start."))
+    await _said(inputs, "Let me start.")
     await _push(inputs, BotStartedSpeakingFrame())
-    await _push(inputs, LLMFullResponseEndFrame())
+    await _ended(inputs)
     worker.messages.append({"role": "tool", "content": "{}", "tool_call_id": "1"})
     await _call(inputs, worker, capture)
-    await _push(inputs, LLMFullResponseEndFrame())
+    await _ended(inputs)
     await _push(inputs, BotStoppedSpeakingFrame())
     outcomes = [(r["id"], r["state"]) for r in rtvi.records() if r["state"] in ("answered", "interrupted")]
     assert sorted(outcomes) == [(1, "answered"), (2, "answered")]
@@ -496,3 +508,23 @@ async def test_a_call_through_a_real_pipeline_is_recorded_from_the_capture(worke
     (sent,) = rtvi.records("sent")
     assert sent["inputs"] == [{"input": "transcript", "data": "Is this it?", "where": "local"}]
     assert pair.take(frame.id) is None
+
+
+async def test_a_reply_that_is_only_a_marker_is_answered_when_it_ends(inputs, worker, rtvi, capture):
+    """A reply with nothing left to speak but an object marker has nothing to hear, so it closes when it ends."""
+    await _call(inputs, worker, capture)
+    await _said(inputs, "flask-3", text_type=REFER)
+    await _ended(inputs)
+    assert rtvi.records("answered") == [{"id": 1, "state": "answered", "turn": 0}]
+
+
+async def test_the_llm_ending_before_the_held_back_words_does_not_close_the_record(inputs, worker, rtvi, capture):
+    """The reply strip holds the last sentence until the reply ends, so the record waits for the strip's end and then for the words to be heard."""
+    await _call(inputs, worker, capture)
+    await _push(inputs, LLMFullResponseEndFrame())
+    await _said(inputs, "Yes.")
+    await _ended(inputs)
+    assert rtvi.records("answered") == []
+    await _push(inputs, BotStartedSpeakingFrame())
+    await _push(inputs, BotStoppedSpeakingFrame())
+    assert rtvi.records("answered") == [{"id": 1, "state": "answered", "turn": 0}]

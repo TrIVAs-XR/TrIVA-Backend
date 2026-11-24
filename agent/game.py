@@ -9,6 +9,7 @@ from typing import Any
 from loguru import logger
 from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.frames.frames import (
+    AggregatedTextFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     Frame,
@@ -17,12 +18,13 @@ from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
     LLMMessagesTransformFrame,
     LLMRunFrame,
-    LLMTextFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
+from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.services.llm_service import FunctionCallParams, LLMService
+from pipecat.utils.text.base_text_aggregator import TextType
 from pipecat.utils.utils import obj_id
 
 from agent.observability.study_log import StudyLog
@@ -54,6 +56,12 @@ STARTED = {"started": True, "next": "Introduce the task as your instructions des
 def wrap(tag: str, data: Any) -> str:
     """Return a game snapshot or client input as the context holds it: its JSON between the opening and closing tag of its kind."""
     return f"<{tag}>\n{json.dumps(data, ensure_ascii=False)}\n</{tag}>"
+
+
+def reply_words(data: FramePushed) -> bool:
+    """Whether this push is the reply strip passing on words of the reply, which will be spoken, rather than an object marker or nothing left after stripping."""
+    frame = data.frame
+    return isinstance(data.source, LLMTextProcessor) and isinstance(frame, AggregatedTextFrame) and frame.text_type == TextType.SENTENCE and bool(frame.text.strip())
 
 
 class Reaction(Enum):
@@ -179,6 +187,12 @@ class Game(BaseObserver):
         # A context frame counts only on its push into the LLM, which may follow other processors; every other frame counts on its first push only.
         if isinstance(frame, LLMContextFrame) and not isinstance(data.destination, LLMService):
             return
+        # A reply's end counts as the reply strip passes it on, after the words it held back for a whole sentence.
+        if isinstance(frame, LLMFullResponseEndFrame):
+            if isinstance(data.source, LLMTextProcessor):
+                self._replying = False
+                self._reconsider()
+            return
         if not isinstance(frame, LLMContextFrame) and not data.first_push:
             return
         if isinstance(frame, UserStartedSpeakingFrame):
@@ -190,10 +204,8 @@ class Game(BaseObserver):
             # A run built on a context that already holds the snapshot answers it, so the held reaction is settled.
             if self._entered is not None and frame.id > self._entered:
                 self._owed = False
-        elif isinstance(frame, LLMTextFrame) and frame.text.strip():
+        elif reply_words(data):
             self._reply_unheard = True
-        elif isinstance(frame, LLMFullResponseEndFrame):
-            self._replying = False
         elif isinstance(frame, BotStartedSpeakingFrame):
             self._bot_speaking = True
             self._reply_unheard = False

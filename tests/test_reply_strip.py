@@ -1,14 +1,16 @@
-"""The reply strip: a voice reading or a tagged game snapshot the LLM copies into its reply is neither spoken nor kept in the context, and other bracketed text is left alone."""
+"""The reply strip: a voice reading or a tagged game snapshot the LLM copies into its reply is neither spoken nor kept in the context, an object marker is passed on unspoken between the words around it, and other bracketed text is left alone."""
 
 import pytest
 
 from pipecat.frames.frames import (
+    AggregatedTextFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     LLMContextAssistantTurnFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMTextFrame,
+    TTSTextFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -18,6 +20,7 @@ from pipecat.services.tts_service import TTSService
 from pipecat.tests.utils import SleepFrame, run_test
 
 from agent.game import TAG, wrap
+from agent.nonverbal import OBJECTS_TAG, REFER
 from agent.reply_strip import reply_strip, strip_readings
 
 # The reading session 61's LLM put at the head of a reply, which the TTS then spoke.
@@ -65,7 +68,7 @@ SNAPSHOT = {"event": "flask_placed", "detail": "erlenmeyer", "recipe": {"flask":
 
 async def _streamed(reply: str) -> tuple[list[str], list[str], list[str]]:
     """Stream a reply in pieces through the reply strip as pipeline.py sets it up, and return what was spoken, what the context holds and the turns the study log records."""
-    tts = _SpokenTTS()
+    tts = _SpokenTTS(skip_text_types=[REFER])
     context = LLMContext()
     down, _ = await run_test(
         Pipeline([reply_strip(), tts, LLMContextAggregatorPair(context).assistant()]),
@@ -100,6 +103,13 @@ async def test_a_made_up_snapshot_is_dropped_and_the_rest_of_the_reply_kept():
     assert turns == [whole]
 
 
+async def test_a_copied_object_list_is_dropped():
+    """An object list the LLM copies into its reply is dropped whole, like a snapshot, and the words after it are spoken and kept."""
+    spoken, context, _ = await _streamed(f'{wrap(OBJECTS_TAG, [{"id": "ice_bath", "kind": "object"}])} Good.')
+    assert spoken == ["Good."]
+    assert context == ["Good."]
+
+
 async def test_an_unclosed_block_is_dropped_at_the_end_of_the_reply():
     """A block the reply ends inside never reaches the speech or the context, while the words before it do."""
     spoken, context, _ = await _streamed('Sure. <held>\n{"left": "beaker"')
@@ -111,3 +121,26 @@ async def test_a_lone_angle_bracket_is_spoken():
     """Text with a bracket that opens no known tag passes unchanged."""
     spoken, _, _ = await _streamed("Keep it < 40 degrees. Good.")
     assert spoken == ["Keep it < 40 degrees.", "Good."]
+
+
+async def test_a_marker_is_not_spoken_and_stays_in_the_context():
+    """An object marker reaches neither the TTS nor the words around it, and the context keeps it where the LLM wrote it."""
+    spoken, context, _ = await _streamed("Yes, <refer>flask-3</refer>that one. Pour it in.")
+    assert spoken == ["Yes,", "that one.", "Pour it in."]
+    assert len(context) == 1 and "<refer>flask-3</refer>" in context[0]
+
+
+async def test_a_marker_leaves_the_tts_between_the_words_around_it():
+    """The TTS passes a marker on after the words before it and ahead of the words after it, so its behaviour can be sent as those words are played."""
+    reply = "Yes, <refer>flask-3</refer>that one. Pour it in."
+    down, _ = await run_test(
+        Pipeline([reply_strip(), _SpokenTTS(skip_text_types=[REFER])]),
+        frames_to_send=[
+            LLMFullResponseStartFrame(),
+            *[LLMTextFrame(reply[i : i + 7]) for i in range(0, len(reply), 7)],
+            LLMFullResponseEndFrame(),
+            SleepFrame(sleep=0.2),
+        ],
+    )
+    units = [(f.text_type, f.text) for f in down if isinstance(f, TTSTextFrame) or (isinstance(f, AggregatedTextFrame) and f.text_type == REFER)]
+    assert units == [("sentence", "Yes,"), (REFER, "flask-3"), ("sentence", "that one."), ("sentence", "Pour it in.")]

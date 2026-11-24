@@ -11,7 +11,7 @@ The lab scenario runs with the Unity client. Still open:
 - A participant's self-talk still triggers a reply every time.
 - A prose history of past events, if the newest snapshot proves too little.
 - A reply whose text never becomes audio, such as a failing TTS, leaves the agent busy for good, and no reaction runs after it.
-- So does a reply that is only a voice reading or only emoji: the reply strip or the TTS leaves nothing to say, but `Inputs` and `Game` saw the LLM's text and wait for speech, so the input record stays open and a held reaction waits until the next turn or interruption.
+- So does a reply that is only emoji: the TTS leaves nothing to say, but `Inputs` and `Game` took the reply strip's words and wait for speech, so the input record stays open and a held reaction waits until the next turn or interruption.
 
 ## Later
 

@@ -7,6 +7,7 @@ import pytest
 
 from loguru import logger
 from pipecat.frames.frames import (
+    AggregatedTextFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     InterruptionFrame,
@@ -14,13 +15,13 @@ from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
     LLMMessagesTransformFrame,
     LLMRunFrame,
-    LLMTextFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import FramePushed
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import LLMService
 from pipecat.tests.utils import run_test
@@ -28,6 +29,7 @@ from pipecat.tests.utils import run_test
 from agent import game as game_module
 from agent.game import STARTED, TAG, Game, Reaction
 from agent.inputs import ContextCapture
+from agent.nonverbal import REFER
 from agent.observability.study_log import StudyLog
 
 GRACE_S = 0.01
@@ -130,17 +132,27 @@ async def opened(game, worker):
     return game
 
 
-async def _push(game: Game, frame, destination=None):
+async def _push(game: Game, frame, destination=None, source=None):
     """Show the game one frame moving through the pipeline, to the given processor or a stand-in."""
     await game.on_push_frame(
         FramePushed(
-            source=_Processor(),
+            source=source or _Processor(),
             destination=destination or _Processor(),
             frame=frame,
             direction=FrameDirection.DOWNSTREAM,
             timestamp=0,
         )
     )
+
+
+async def _said(game: Game, text: str, text_type: str = "sentence"):
+    """Show the game a unit of the reply as the reply strip passes it on: words, or an object marker with text_type refer."""
+    await _push(game, AggregatedTextFrame(text=text, text_type=text_type), source=LLMTextProcessor())
+
+
+async def _ended(game: Game):
+    """Show the game the reply's end as the reply strip passes it on, after any words it held back."""
+    await _push(game, LLMFullResponseEndFrame(), source=LLMTextProcessor())
 
 
 async def test_the_first_snapshot_opens_the_conversation(game, worker, study, tmp_path):
@@ -211,8 +223,8 @@ async def _run(game: Game, frame: LLMContextFrame):
 async def test_a_reply_not_yet_heard_keeps_the_agent_busy(opened, worker):
     """Between the LLM finishing and the voice starting, the agent is still about to speak, so a reaction waits for it."""
     await _run(opened, LLMContextFrame(context=LLMContext()))
-    await _push(opened, LLMTextFrame(text="Well done."))
-    await _push(opened, LLMFullResponseEndFrame())
+    await _said(opened, "Well done.")
+    await _ended(opened)
     await opened.receive(_snapshot("when_idle"))
     await asyncio.sleep(SETTLE_S)
     assert worker.runs() == 0
@@ -227,7 +239,7 @@ async def test_a_reply_with_nothing_to_say_frees_the_agent(opened, worker):
     """A reply with no text is never heard, so the agent is idle again once the LLM finishes."""
     await _run(opened, LLMContextFrame(context=LLMContext()))
     await opened.receive(_snapshot("when_idle"))
-    await _push(opened, LLMFullResponseEndFrame())
+    await _ended(opened)
     await asyncio.sleep(SETTLE_S)
 
     assert worker.runs() == 1
@@ -239,7 +251,7 @@ async def test_a_user_turn_after_the_snapshot_settles_the_reaction(opened, worke
     await opened.receive(_snapshot("when_idle"))
     await _push(opened, UserStoppedSpeakingFrame())
     await _run(opened, LLMContextFrame(context=LLMContext()))
-    await _push(opened, LLMFullResponseEndFrame())
+    await _ended(opened)
     await asyncio.sleep(SETTLE_S)
 
     assert worker.runs() == 0
@@ -250,7 +262,7 @@ async def test_a_run_begun_before_the_snapshot_entered_does_not_settle_it(opened
     earlier = LLMContextFrame(context=LLMContext())
     await opened.receive(_snapshot("when_idle"))
     await _run(opened, earlier)
-    await _push(opened, LLMFullResponseEndFrame())
+    await _ended(opened)
     await asyncio.sleep(SETTLE_S)
 
     assert worker.runs() == 1
@@ -259,8 +271,8 @@ async def test_a_run_begun_before_the_snapshot_entered_does_not_settle_it(opened
 async def test_the_context_committed_after_a_reply_leaves_the_agent_idle(opened, worker):
     """The assistant aggregator pushes the context on after the bot has spoken, in the order a session sees it, and that is no new reply."""
     await _run(opened, LLMContextFrame(context=LLMContext()))
-    await _push(opened, LLMTextFrame(text="Set the flask on top of it."))
-    await _push(opened, LLMFullResponseEndFrame())
+    await _said(opened, "Set the flask on top of it.")
+    await _ended(opened)
     await _push(opened, BotStartedSpeakingFrame())
     await _push(opened, BotStoppedSpeakingFrame())
     await _push(opened, LLMContextFrame(context=LLMContext()))
@@ -443,7 +455,30 @@ async def test_a_run_through_a_real_pipeline_settles_a_held_reaction(opened, wor
     await opened.receive(_snapshot("when_idle"))
     pair = ContextCapture()
     await run_test(Pipeline([pair.before_llm(), _PipelineLLM()]), frames_to_send=[LLMContextFrame(context=LLMContext())], observers=[opened])
-    await _push(opened, LLMFullResponseEndFrame())
+    await _ended(opened)
     await _push(opened, BotStoppedSpeakingFrame())
     await asyncio.sleep(SETTLE_S)
+    assert worker.runs() == 0
+
+
+async def test_a_reply_that_is_only_a_marker_frees_the_agent(opened, worker):
+    """A reply with nothing left to speak but an object marker is never heard, so the agent is idle again once it ends."""
+    await _run(opened, LLMContextFrame(context=LLMContext()))
+    await _said(opened, "flask-3", text_type=REFER)
+    await opened.receive(_snapshot("when_idle"))
+    await _ended(opened)
+    await asyncio.sleep(SETTLE_S)
+
+    assert worker.runs() == 1
+
+
+async def test_the_llm_ending_before_the_held_back_words_leaves_the_agent_busy(opened, worker):
+    """The reply strip holds the last sentence until the reply ends, so only its end counts, and the words it then passes on are still to be heard."""
+    await _run(opened, LLMContextFrame(context=LLMContext()))
+    await opened.receive(_snapshot("when_idle"))
+    await _push(opened, LLMFullResponseEndFrame())
+    await _said(opened, "Well done.")
+    await _ended(opened)
+    await asyncio.sleep(SETTLE_S)
+
     assert worker.runs() == 0

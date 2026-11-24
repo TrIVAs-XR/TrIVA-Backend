@@ -1,4 +1,4 @@
-"""Removes what the LLM copies from its input into its reply, voice readings and tagged game snapshots or client inputs, so it is neither spoken nor kept in the context or the study log."""
+"""Removes what the LLM copies from its input into its reply, voice readings and tagged game snapshots, client inputs or object lists, so it is neither spoken nor kept in the context or the study log, and sets each object marker apart from the words around it."""
 
 import re
 
@@ -8,6 +8,7 @@ from pipecat.utils.text.pattern_pair_aggregator import MatchAction, PatternMatch
 
 from agent.game import TAG as GAME_TAG
 from agent.inputs import CLIENT_INPUTS
+from agent.nonverbal import OBJECTS_TAG, REFER
 
 # A reading as expressive conversation writes it: bracketed categories in parentheses, such as ([tone neutral=0.99],[arousal value=0.30]).
 READING = re.compile(r"\(\[\w+ [^\[\]()]*\](?:,\s*\[\w+ [^\[\]()]*\])*\)\s*")
@@ -38,9 +39,10 @@ async def _log_block(match: PatternMatch):
 
 
 def reply_strip() -> LLMTextProcessor:
-    """Build the processor between the LLM and the TTS: it aggregates the reply by sentence, drops every tagged block, even one spanning sentences, and strips every reading."""
+    """Build the processor between the LLM and the TTS: it aggregates the reply by sentence, drops every tagged block, even one spanning sentences, passes each object marker on as a unit of its own, and strips every reading."""
     aggregator = _Aggregator()
-    for tag in (GAME_TAG, *CLIENT_INPUTS):
+    for tag in (GAME_TAG, *CLIENT_INPUTS, OBJECTS_TAG):
         aggregator.add_pattern(tag, f"<{tag}>", f"</{tag}>", MatchAction.REMOVE)
         aggregator.on_pattern_match(tag, _log_block)
+    aggregator.add_pattern(REFER, f"<{REFER}>", f"</{REFER}>", MatchAction.AGGREGATE)
     return LLMTextProcessor(text_aggregator=aggregator, text_transforms=[("*", strip_readings)])
