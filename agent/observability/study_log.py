@@ -60,6 +60,11 @@ class StudyLog(BaseObserver):
         """The observers the worker has to run for this log: itself, and the pipecat trackers it reads turns and latency from."""
         return [self, self._turns, self._latency]
 
+    @property
+    def turn(self) -> int:
+        """The turn every line written now is stamped with, for components that send it to the client."""
+        return self._turn
+
     def write(self, event: str, **fields: Any):
         """Append one event as a JSON line, stamped with wall-clock time and the current turn, and flush it to disk."""
         line = {

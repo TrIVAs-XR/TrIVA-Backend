@@ -1,5 +1,6 @@
 """Client inputs in the LLM context and the per-call input record: the draft before a call, what the call got and missed, and whether its reply was heard."""
 
+import asyncio
 import json
 
 import pytest
@@ -142,7 +143,7 @@ def _logged(study: StudyLog, path) -> list[dict]:
     study.close()
     with open(path, encoding="utf-8") as file:
         lines = [json.loads(line) for line in file]
-    return [{k: v for k, v in line.items() if k not in ("event", "ts", "iso", "turn")} for line in lines if line["event"] == "input_record"]
+    return [{k: v for k, v in line.items() if k not in ("event", "ts", "iso")} for line in lines if line["event"] == "input_record"]
 
 
 def _held(worker: _Worker) -> list[str]:
@@ -284,6 +285,7 @@ async def test_a_call_is_recorded_from_the_context_it_reads(inputs, worker, rtvi
                 {"input": "held", "data": {"right": FLASK_3}, "where": "client"},
             ],
             "dropped": [],
+            "turn": 0,
         }
     ]
     assert _logged(study, tmp_path / "P01.jsonl") == sent
@@ -318,6 +320,19 @@ async def test_a_transcript_counts_once_and_a_game_snapshot_triggers(inputs, wor
     assert second["id"] == 2
 
 
+async def test_a_record_carries_the_study_log_turn_except_a_draft(inputs, worker, rtvi, study, tmp_path, capture):
+    """Once a turn has started, the sent record and its outcome carry its number, as the study log stamps them, and a draft carries none."""
+    await study.observers[1].on_push_frame(FramePushed(source=_Processor(), destination=_Processor(), frame=UserStartedSpeakingFrame(), direction=FrameDirection.DOWNSTREAM, timestamp=0))
+    # The turn tracker runs its turn-started handler as a task; this lets it run.
+    await asyncio.sleep(0)
+    worker.messages.append({"role": "user", "content": "Hello."})
+    await _call(inputs, worker, capture)
+    await _push(inputs, LLMFullResponseEndFrame())
+    assert [r["turn"] for r in rtvi.records() if r["state"] != "draft"] == [1, 1]
+    assert all("turn" not in r for r in rtvi.records("draft"))
+    assert [r["turn"] for r in _logged(study, tmp_path / "P01.jsonl")] == [1, 1]
+
+
 async def test_a_tool_result_triggers_the_call(inputs, worker, rtvi, capture):
     """A call that answers a tool result names it as the trigger."""
     worker.messages.append({"role": "tool", "content": "{\"started\": true}", "tool_call_id": "1"})
@@ -345,15 +360,15 @@ async def test_a_reply_heard_to_its_end_is_answered(inputs, worker, rtvi, study,
     await _push(inputs, LLMFullResponseEndFrame())
     assert rtvi.records("answered") == []
     await _push(inputs, BotStoppedSpeakingFrame())
-    assert rtvi.records("answered") == [{"id": 1, "state": "answered"}]
-    assert _logged(study, tmp_path / "P01.jsonl")[-1] == {"id": 1, "state": "answered"}
+    assert rtvi.records("answered") == [{"id": 1, "state": "answered", "turn": 0}]
+    assert _logged(study, tmp_path / "P01.jsonl")[-1] == {"id": 1, "state": "answered", "turn": 0}
 
 
 async def test_a_reply_without_words_is_answered_when_it_ends(inputs, worker, rtvi, capture):
     """A call that only calls a tool has nothing to hear, so it closes when its reply ends."""
     await _call(inputs, worker, capture)
     await _push(inputs, LLMFullResponseEndFrame())
-    assert rtvi.records("answered") == [{"id": 1, "state": "answered"}]
+    assert rtvi.records("answered") == [{"id": 1, "state": "answered", "turn": 0}]
 
 
 async def test_a_reply_cut_off_is_interrupted(inputs, worker, rtvi, capture):

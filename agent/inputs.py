@@ -258,8 +258,9 @@ class Inputs(BaseObserver):
         await self._send({"id": self._id, "state": "draft", "inputs": draft, "dropped": []}, log=False)
 
     async def _send(self, record: dict, log: bool):
-        """Send a record to the client and, when asked, write it to the study log."""
-        await self._rtvi.send_server_message({"t": INPUTS, "d": record})
+        """Send a record to the client, with the study log's turn unless it is a draft, and, when asked, write it to the study log, which stamps the turn itself."""
+        message = record if record["state"] == "draft" else {**record, "turn": self._study.turn}
+        await self._rtvi.send_server_message({"t": INPUTS, "d": message})
         if log:
             self._study.write("input_record", **record)
 
